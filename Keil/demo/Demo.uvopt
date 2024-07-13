@@ -56,7 +56,7 @@
         <AsmSymb>1</AsmSymb>
         <AsmXref>0</AsmXref>
         <CCond>1</CCond>
-        <CCode>0</CCode>
+        <CCode>1</CCode>
         <CListInc>0</CListInc>
         <CSymb>0</CSymb>
         <LinkerCodeListing>0</LinkerCodeListing>

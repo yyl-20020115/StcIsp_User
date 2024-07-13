@@ -5,6 +5,7 @@
 #include "afxdialogex.h"
 #define HEAD_SIGN 0x23
 #define TAIL_SIGN 0x24
+#define BLOCK_SIZE 4096
 
 #define DFU_CMD_CONNECT         0xa0
 #define DFU_CMD_READ            0xa1
@@ -109,157 +110,141 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 }
 BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 {
-	unsigned long long input_length; // esi
+	unsigned int input_text_length; // esi
 	char* input_text_buffer; // ebp
 	char* token; // esi
 	char ch; // dl
-	char* pch_next; // esi
-	char ch1; // al
-	char* pch_next_1; // esi
-	char pch_next_2; // al
-	char ch3; // cl
-	char pch_next_3; // dl
-	char ch4; // al
-	unsigned int v16;
-	char ch5;
-	short v18;
-	char* v19;
-	unsigned int v20;
-	int v21;
-	char v22;
-	char* v23;
-	int v24;
-	bool v25;
+	unsigned int length;
 	int index;
 	unsigned short binary_length;
 	unsigned int address;
-	unsigned long long input_length_copy;
-	int input_length_real;
+	unsigned int binary_input_length = 0;
 	unsigned char* code_buffer;
-	unsigned int v38;
-	char Str;
-	char ch2;
-	char v41;
-	char v42;
+	unsigned char type;
+	unsigned char check_sum;
+	unsigned char real_sum;
 	CFile file;
 	if (!file.Open(path, CFile::shareDenyNone | CFile::typeBinary, 0))
 	{
 		AfxMessageBox(_T("打开文件失败 !"), 0, 0);
 		return FALSE;
 	}
-	input_length_copy = input_length = file.GetLength();
-	input_text_buffer = new char[input_length + 1];
-	file.Read(input_text_buffer, (UINT)input_length);
-	input_text_buffer[input_length] = 0;
+	input_text_length = (unsigned int)file.GetLength();
+	input_text_buffer = new char[input_text_length + 1];
+	file.Read(input_text_buffer, (UINT)input_text_length);
+	input_text_buffer[input_text_length] = 0;
 
 	code_buffer = new unsigned char[0x10000];
 	memset(code_buffer, 0xff, 0x10000);
 
 	if (IsHex) {
-		input_length_copy = 0;
 		token = strtok(input_text_buffer, "\r\n");
 		if (token != 0)
 		{
-			while (TRUE)
+			char local[5] = { 0 };
+			do
 			{
 				ch = *token;
-				pch_next = token + 1;
+				//长度 地址 类型 数据 校验和
+				//:BBAAAATTHHHHHHHH......HHCC
+				//: START
+				//BB: Length of HH bytes
+				//AAAA: Address of data
+				//TT: Type, 00:Record;01:HEX End with checksum,02:Ext Address;03:Start Segment;04:Ext Linear;05:Start Linear(entry point)
+				//HH: Hex data
+				//CC: Check sum
 				if (ch == ':')
 				{
-					ch1 = *pch_next;
-					pch_next_1 = pch_next + 1;
-					Str = ch1;
-					ch2 = *pch_next_1++;
-					v41 = 0;
-					v38 = strtoul(&Str, 0, 16);
-					pch_next_2 = *pch_next_1++;
-					Str = pch_next_2;
-					ch3 = *pch_next_1++;
-					ch2 = ch3;
-					pch_next_3 = *pch_next_1++;
-					v41 = pch_next_3;
-					ch4 = *pch_next_1++;
-					v42 = ch4;
-					v16 = strtoul(&Str, 0, 16);
-					ch5 = *pch_next_1++;
-					v18 = v16;
-					Str = ch5;
-					input_length_real = v16;
-					ch2 = *pch_next_1;
-					v19 = pch_next_1 + 1;
-					v41 = 0;
-					v20 = strtoul(&Str, 0, 16);
-					v21 = v38 + HIBYTE(v18) + v20 + (unsigned char)v18;
-					if (v20 == 0)
+					real_sum = 0;
+					local[0] = *(++token);
+					local[1] = *(++token);
+					length = strtoul(local, 0, 16);
+					real_sum += (char)length;
+					memset(local, 0, sizeof(local));
+					local[0] = *(++token);
+					local[1] = *(++token);
+					local[2] = *(++token);
+					local[3] = *(++token);
+					address = strtoul(local, 0, 16);
+					real_sum += (char)((address >> 8) & 0xff);
+					real_sum += (char)(address& 0xff);
+					memset(local, 0, sizeof(local));
+					local[0] = *(++token);
+					local[1] = *(++token);
+					type = (unsigned char)strtoul(local, 0, 16);
+					real_sum += type;
+					//only process type=0 (data) because the input hex file is simple
+					if (type == 0 && length > 0)
 					{
-						v41 = 0;
-						if (v38 != 0)
+						memset(local, 0, sizeof(local));
+						for (unsigned int i = 0; i < length; i++)
 						{
-							do
-							{
-								v22 = *v19;
-								v23 = v19 + 1;
-								Str = v22;
-								ch2 = *v23;
-								v19 = v23 + 1;
-								v24 = strtoul(&Str, 0, 16);
-								*((unsigned char*)code_buffer + input_length_real) = v24;
-								//LOBYTE(v21) = v24 + v21;
-								v21 += v24;
-								v25 = v38 == 1;
-								++input_length_real;
-								--v38;
-							} while (!v25);
+							local[0] = *(++token);
+							local[1] = *(++token);
+							unsigned char value = (unsigned char)strtoul(local, 0, 16);
+							*((unsigned char*)code_buffer + (address++)) = value;
+							real_sum += value;
 						}
-						Str = *v19;
-						ch2 = v19[1];
+						if (address > binary_input_length) {
+							binary_input_length = address;
+						}
+
+						memset(local, 0, sizeof(local));
+						local[0] = *(++token);
+						local[1] = *(++token);
+
+						check_sum = (unsigned char)strtoul(local, 0, 16);
 						//check the checksum
-						if (0 != ((unsigned char)strtoul(&Str, 0, 16) + (unsigned char)v21))
+						unsigned char sum = real_sum + check_sum;
+						if (sum != 0)
 						{
 							delete[] code_buffer;
 							delete[] input_text_buffer;
 							AfxMessageBox(_T("HEX文件数据错误 !"), 0, 0);
 							return FALSE;
 						}
-						if (input_length_real > input_length_copy)
-							input_length_copy = input_length_real;
-						goto NextToken;
-					}
-					if (v20 != 1)
-					{
-						goto NextToken;
 					}
 				}
-			NextToken:
 				token = strtok(0, "\r\n");
-				if (token == 0) break;
-			}
+			} while (token != 0);
+
 			delete[] input_text_buffer;
-			input_length = input_length_copy;
 		}
+	}
+	else {
+		binary_input_length = input_text_length > 0x10000 ? 0x10000 : input_text_length;
+		memcpy(code_buffer, input_text_buffer, binary_input_length);
 	}
 	//here is for binary
 	if (code_buffer != nullptr && code_buffer[0] == 0x02)
 	{
 		binary_length = (((unsigned short)code_buffer[1]) << 8) | (code_buffer[2]);
-
-		if (binary_length >= (4906 + 3))
+		if (binary_length >= (BLOCK_SIZE + 3))
 		{
 			index = 3;
-			while (code_buffer[index++] == 0xff);
-			if (index >= 4096 + 3)
+			int cs = 0;
+			int fills = 0;
+			while (code_buffer[index++] == 0xff) cs++;
+			if (cs == 0) {
+				fills = BLOCK_SIZE;
+				index = 3;
+				while (code_buffer[index++] == 0) cs++;
+			}
+			if (cs>= BLOCK_SIZE && index >= BLOCK_SIZE + 3)
 			{
 				//relocate first 3 bytes
-				code_buffer[4096] = code_buffer[0];
-				code_buffer[4097] = code_buffer[1];
-				code_buffer[4098] = code_buffer[2];
+				code_buffer[BLOCK_SIZE + 0] = code_buffer[0];
+				code_buffer[BLOCK_SIZE + 1] = code_buffer[1];
+				code_buffer[BLOCK_SIZE + 2] = code_buffer[2];
 				//make original 3 byte 0xff
+				if (fills > 0) {
+					memset(code_buffer, 0xff, fills);
+				}
 				code_buffer[0] = 0xff;
 				code_buffer[1] = 0xff;
 				code_buffer[2] = 0xff;
-
 				CString display_text_buffer;
-				if (input_length_copy > 0)
+				if (binary_input_length > 0)
 				{
 					address = 0;
 					do
@@ -269,16 +254,16 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 							addressHex.Format(_T("%04X "), address);
 							display_text_buffer += addressHex;
 						}
-						else {
+						{
 							CString dataHex;
-							dataHex.Format(_T("%02X "), (unsigned char)input_text_buffer[address]);
+							dataHex.Format(_T("%02X "), (unsigned char)code_buffer[address]);
 							display_text_buffer += dataHex;
 						}
 						if (address % 16 == 15) {
 							display_text_buffer += _T("\r\n");
 						}
 						++address;
-					} while (address < input_length_copy);
+					} while (address < binary_input_length);
 				}
 				this->HexEdit.SetWindowText(display_text_buffer);
 
@@ -287,7 +272,7 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 					delete[] this->CodeBuffer;
 					this->CodeBuffer = 0;
 				}
-				this->CodeLength = input_length_copy;
+				this->CodeLength = binary_input_length;
 				this->CodeBuffer = code_buffer;
 				this->CodePath = path;
 				this->IsCodeHex = IsHex;
@@ -297,7 +282,7 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 		}
 	}
 	delete[] code_buffer;
-	AfxMessageBox(_T("代码文件不规范 !"), 0, 0);
+	AfxMessageBox(_T("代码文件不规范, 无法加载 !"), 0, 0);
 	return FALSE;
 }
 
@@ -333,8 +318,6 @@ END_MESSAGE_MAP()
 
 
 // CStcIspUserDlg 对话框
-
-
 
 CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_STCISP_USER_DIALOG, pParent)
@@ -374,10 +357,12 @@ BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	
 	ON_BN_CLICKED(IDCANCEL, &CStcIspUserDlg::OnBnClickedCancel)
 	ON_BN_CLICKED(IDC_BUTTON_OPEN_FILE, &CStcIspUserDlg::OnBnClickedButtonOpenFile)
 	ON_BN_CLICKED(IDC_BUTTON_DOWNLOAD, &CStcIspUserDlg::OnBnClickedButtonDownload)
 	ON_BN_CLICKED(IDC_BUTTON_STOP, &CStcIspUserDlg::OnBnClickedButtonStop)
+	ON_WM_CTLCOLOR()
 END_MESSAGE_MAP()
 
 BOOL CStcIspUserDlg::OnInitDialog()
@@ -406,6 +391,7 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	this->OpenButton.EnableWindow(TRUE);
 	this->DownloadButton.EnableWindow(FALSE);
 	this->StopButton.EnableWindow(FALSE);
+	this->HexEdit.SetBackColor(RGB(0xff, 0xff, 0xff));
 	for (int i = 1; i < 256; i++) {
 		CString com_name;
 		com_name.Format(_T("COM%d"), i);

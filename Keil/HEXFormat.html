@@ -1,0 +1,51 @@
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <title>HEX 文件格式</title>
+</head>
+<body>
+    <article class="baidu_pl">
+        <div id="article_content" class="article_content clearfix">
+        <link rel="stylesheet" href="HEXFormat_files/kdoc_html_views-1a98987dfd.css">
+        <link rel="stylesheet" href="HEXFormat_files/ck_htmledit_views-044f2cf1dc.css">
+             
+                <div id="content_views" class="htmledit_views">
+                    <h2><a name="t0"></a><a name="_Toc73545821"><span style="color:#0d0016;">一、HEX</span></a><span style="color:#0d0016;">文件格式说明</span></h2> 
+<p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;<span style="background-color:#ffffff;"><span style="color:#000000;">Hex</span></span><span style="background-color:#ffffff;"><span style="color:#000000;">文件是Intel公司提出的按地址排列的数据信息格式,数据宽度为字节,所有数据使用16进制数字表示，并且</span></span>以<a href="https://so.csdn.net/so/search?q=ASCII%E7%A0%81&amp;spm=1001.2101.3001.7020" target="_blank" class="hl hl-1" data-report-click="{&quot;spm&quot;:&quot;1001.2101.3001.7020&quot;,&quot;dest&quot;:&quot;https://so.csdn.net/so/search?q=ASCII%E7%A0%81&amp;spm=1001.2101.3001.7020&quot;,&quot;extra&quot;:&quot;{\&quot;searchword\&quot;:\&quot;ASCII码\&quot;}&quot;}" data-tit="ASCII码" data-pretit="ascii码">ASCII码</a>的形式，按行记录数据，下图为某工程代码的HEX文件局部截图：</p> 
+<p style="text-align:center;"><img alt="" height="252" src="HEXFormat_files/20210610224427278.png" width="454"></p> 
+<p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;如上图所示，HEX文件<span style="color:#000000;">每一行均以“</span><span style="color:#000000;">:</span><span style="color:#000000;">”开头，表明记录的开始，“：”之后</span><span style="color:#000000;">,</span>每至少2个字符表示一组16进制数据，格式形如:<span style="background-color:#ffff00;">BB</span><span style="background-color:#00ff00;">AAAA</span><span style="background-color:#00ffff;">TT</span><span style="background-color:#ff00ff;">HHHH....HHH</span><span style="background-color:#ff0000;">CC</span>。</p> 
+<ol><li><span style="background-color:#ffff00;">BB</span> -- 16进制，表示此行数据长度字节数，即：<span style="background-color:#ff00ff;">HH</span>的数目</li><li><span style="background-color:#00ff00;">AAAA</span> -- 16进制，表示数据记录的地址，根据类型不同有可能是基地址、段地址或偏移地址。</li><li><span style="background-color:#00ffff;">TT</span> -- 16进制，表示记录类型。<strong><span style="color:#fe2c24;">00</span></strong>-代表本行是数据记录、<span style="color:#fe2c24;"><strong>01</strong></span>-代表HEX文件结束、<span style="color:#fe2c24;"><strong>02</strong></span>-标识扩展段地址记录，表明后面所有数据地址需要加上段地址左移4位、<span style="color:#fe2c24;"><strong>03</strong></span>-开始段地址记录：开始段地址记录，大部分Hex中不使用该记录类型，网上关于该记录类型的描述很少，具体作用不详、<span style="color:#fe2c24;"><strong>04</strong></span>-标识扩展线性地址记录，表明后面所有数据地址+线性地址左移16位，将该地址左移16 位后作为基地址，并且表示在下一个04类型行出现之前都要使用该地址作为基地址。<span style="color:#fe2c24;"><strong>05</strong></span>-开始线性地址记录：开始线性地址记录，即:程序入口地址(程序入口地址未必是main函数地址)。</li><li><span style="background-color:#ff00ff;">HH...HH</span> -- 16进制数据，字节顺序根据芯片大小端和字长决定，处理器若为大端存储，高字节在前，低字节在后（如NXP的5744P），小端存储，则低字节在前，高字节在后（如STM32）。</li><li style="text-align:justify;"><span style="background-color:#ff0000;">CC</span>
+ -- 16进制，校验码，除冒号和自身以外的其他字节数据加起来模除256的余数的补码，如上图第一行，其校验码为01 + 
+~(02+00+00+04+01+00)= 
+F9。具体计算过程为：（02+00+00+04+01+00）加和为0x07，模除256后，商0余0x07，0x07补码为0xF9。</li></ol> 
+<h2 style="text-align:justify;"><a name="t1"></a><a name="_Toc73545822"><span style="color:#0d0016;">二、HEX</span></a><span style="color:#0d0016;">记录类型详解</span></h2> 
+<p><span style="color:#0d0016;">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;</span>记录类型：0x00，数据标识</p> 
+<p style="text-align:center;"><img alt="" height="98" src="HEXFormat_files/2021061022495899.png" width="547"></p> 
+<p style="margin-left:0;">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 记录类型：0x01，本行为文件结束标识</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" height="106" src="HEXFormat_files/20210610225018968.png" width="554"></p> 
+<p style="margin-left:0px;">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;记录类型：0x02，扩展段地址标识</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" height="101" src="HEXFormat_files/20210610225042565.png" width="554"></p> 
+<p style="margin-left:0px;">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;记录类型：0x03，起始段地址标识</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" height="99" src="HEXFormat_files/20210610225104821.png" width="554"></p> 
+<p style="margin-left:0px;">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;记录类型：0x04，扩展线性地址标识</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" height="109" src="HEXFormat_files/20210610225126514.png" width="554"></p> 
+<p style="margin-left:0px;">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;记录类型：0x05，起始线性地址记录标识</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" height="91" src="HEXFormat_files/20210610225146179.png" width="554"></p> 
+<p style="margin-left:0px;">&nbsp; &nbsp; &nbsp; &nbsp; 一旦出现段地址或者线性地址，之后所有数据都要加偏移地址，直到出现一个新的段地址或者线性地址，再重新变更偏移地址。数据物理地址为：线性地址左移16位+段地址左移4位+偏移地址。&nbsp; &nbsp;</p> 
+<p style="margin-left:0;text-align:justify;"><strong>地址计算示例：</strong></p> 
+<p style="margin-left:0;">:<span style="background-color:#ffff00;">02</span><span style="background-color:#00ff00;">0000</span><span style="background-color:#00ffff;">04</span><span style="background-color:#ff00ff;">0108</span><u><span style="background-color:#ff0000;">EA</span></u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 线性偏移地址：0x0108</p> 
+<p style="margin-left:0;">:<span style="background-color:#ffff00;">02</span><span style="background-color:#00ff00;">0000</span><span style="background-color:#00ffff;">02</span><span style="background-color:#ff00ff;">12FF</span><span style="background-color:#ff0000;">BD</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 扩展段地址：0x12FF</p> 
+<p style="margin-left:0;">:<span style="background-color:#ffff00;">04</span><span style="background-color:#00ff00;">0100</span><span style="background-color:#00ffff;">00</span><span style="background-color:#ff00ff;">90FFAA55</span><span style="background-color:#ff0000;">02</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 数据地址：0x0100</p> 
+<ul><li>基地址：0108左移16位，0x01080000;</li><li>扩展段地址：12FF左移4位，0x00012FF0;</li><li>数据偏移地址：0x0100;</li><li style="text-align:justify;">实际物理地址=基地址+扩展段地址+偏移地址=0x010930F0。</li></ul> 
+<p style="margin-left:0;text-align:justify;">因此示例所表示的4个字节数据，在大端存储的处理器内存中的表示如下表所示：</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" height="242" src="HEXFormat_files/20210610225304426.png" width="631"></p> 
+<h2><a name="t2"></a><a name="_Toc73545823"><span style="color:#0d0016;">三、文件结束与程序入口地址</span></a></h2> 
+<p style="text-align:center;"><span style="color:#0d0016;">&nbsp; &nbsp; &nbsp;&nbsp;</span><img alt="" height="226" src="HEXFormat_files/20210610225328976.png" width="554"></p> 
+<p>&nbsp; &nbsp; &nbsp; &nbsp;上图示例为某工程HEX文件的末尾内容，其中包含了三种记录类型：00、01、05，其中：</p> 
+<ul><li style="text-align:justify;">00代表数据记录，其后的数据一般直接存放在芯片flash中。</li><li style="text-align:justify;">01代表HEX文件结束，其后不跟数据，仅包含校验和。</li><li style="text-align:justify;">05代表程序入口地址，其数据域的内容在本例中为0x01010400,该地址通常为MCU的复位向量地址，该地址在编译时由工程的链接脚本决定。</li></ul> 
+<p style="text-align:justify;"><strong>本文是作者闲时业余记录，如由遗漏错误，请见谅，感谢观看文章，转载不用注明出处。</strong></p>
+                </div><div><div></div></div>
+        </div>
+        
+    </article>
+
+</body></html>

@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "CColorEdit.h"
 
 #define PAGE_SIZE 128
 
@@ -40,7 +41,7 @@ public:
 	afx_msg void OnBnClickedButtonOpenFile();
 	afx_msg void OnBnClickedButtonDownload();
 	afx_msg void OnBnClickedButtonStop();
-	CEdit HexEdit;
+	CColorEdit HexEdit;
 	CComboBox ComboPorts;
 	CStatic StatusText;
 	CProgressCtrl ProgressDownload;
@@ -70,5 +71,4 @@ protected:
 	unsigned char Sum(unsigned char* buffer, int length);
 
 	void SetStatusText(const TCHAR* format = nullptr, ...);
-
 };
