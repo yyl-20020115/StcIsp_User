@@ -56,6 +56,8 @@ protected:
 	BOOL IsWorking;
 	unsigned char* CodeBuffer;
 	unsigned long long CodeLength;
+	HANDLE QuitEvent;
+	CWinThread* WorkingThread;
 protected:
 
 	BOOL CheckAndLoadCodeFile(const CString& path, BOOL IsHex);
@@ -71,4 +73,6 @@ protected:
 	unsigned char Sum(unsigned char* buffer, int length);
 
 	void SetStatusText(const TCHAR* format = nullptr, ...);
+public:
+	afx_msg void OnClose();
 };

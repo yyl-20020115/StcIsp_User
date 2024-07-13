@@ -64,7 +64,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 			else
 			{
 				_this->SetStatusText(_T("正在下载代码 ... "));
-				while (TRUE)
+				while (WaitForSingleObject(_this->QuitEvent,1)!=WAIT_OBJECT_0)
 				{
 					ptr = _this->CodeBuffer + address;
 					if (*ptr == 0xff) //skip 0xff bytes
@@ -207,14 +207,13 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 				}
 				token = strtok(0, "\r\n");
 			} while (token != 0);
-
-			delete[] input_text_buffer;
 		}
 	}
 	else {
 		binary_input_length = input_text_length > 0x10000 ? 0x10000 : input_text_length;
 		memcpy(code_buffer, input_text_buffer, binary_input_length);
 	}
+	delete[] input_text_buffer;
 	//here is for binary
 	if (code_buffer != nullptr && code_buffer[0] == 0x02)
 	{
@@ -328,8 +327,11 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	, IsWorking(FALSE)
 	, CodeBuffer(nullptr)
 	, CodeLength(0)
+	, QuitEvent(INVALID_HANDLE_VALUE)
+	, WorkingThread(nullptr)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+	this->QuitEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
 CStcIspUserDlg::~CStcIspUserDlg()
@@ -339,6 +341,10 @@ CStcIspUserDlg::~CStcIspUserDlg()
 		this->CodeBuffer = nullptr;
 	}
 	this->CodeLength = 0;
+	if (this->QuitEvent != INVALID_HANDLE_VALUE) {
+		CloseHandle(this->QuitEvent);
+		this->QuitEvent = INVALID_HANDLE_VALUE;
+	}
 }
 
 void CStcIspUserDlg::DoDataExchange(CDataExchange* pDX)
@@ -363,6 +369,7 @@ BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_DOWNLOAD, &CStcIspUserDlg::OnBnClickedButtonDownload)
 	ON_BN_CLICKED(IDC_BUTTON_STOP, &CStcIspUserDlg::OnBnClickedButtonStop)
 	ON_WM_CTLCOLOR()
+	ON_WM_CLOSE()
 END_MESSAGE_MAP()
 
 BOOL CStcIspUserDlg::OnInitDialog()
@@ -445,6 +452,7 @@ HCURSOR CStcIspUserDlg::OnQueryDragIcon()
 
 void CStcIspUserDlg::OnBnClickedCancel()
 {
+	this->OnBnClickedButtonStop();
 	CDialogEx::OnCancel();
 }
 
@@ -465,33 +473,31 @@ void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 
 void CStcIspUserDlg::OnBnClickedButtonDownload()
 {
-#if 0
-	if (!this->IsCodeReady) {
-		if (this->CodePath.GetLength() > 0) {
-			if (this->IsCodeReady
-				= this->CheckAndLoadCodeFile(
-					this->CodePath, this->IsCodeHex))
-			{
-				AfxBeginThread(DoDownload, this);
-			}
-		}
-		else {
-			MessageBox(_T("需要先打开代码文件!"), 0, MB_ICONWARNING);
-		}
+	if (this->WorkingThread != nullptr) {
+		this->WorkingThread = AfxBeginThread(DoDownload, this);
 	}
-	else {
-		AfxBeginThread(DoDownload, this);
-	}
-#else
-	AfxBeginThread(DoDownload, this);
-#endif
 }
 
+void CStcIspUserDlg::OnClose()
+{
+	if (this->WorkingThread != nullptr) {
+		SetEvent(this->QuitEvent);
+		WaitForSingleObject(this->WorkingThread->m_hThread, INFINITE);
+		delete this->WorkingThread;
+		this->WorkingThread = nullptr;
+	}
+	CDialogEx::OnClose();
+}
 
 void CStcIspUserDlg::OnBnClickedButtonStop()
 {
 	this->StopButton.EnableWindow(FALSE);
-	this->IsWorking = FALSE;
+	if (this->WorkingThread != nullptr) {
+		SetEvent(this->QuitEvent);
+		WaitForSingleObject(this->WorkingThread->m_hThread, INFINITE);
+		delete this->WorkingThread;
+		this->WorkingThread = nullptr;
+	}
 }
 
 
@@ -697,3 +703,5 @@ void CStcIspUserDlg::SetStatusText(const TCHAR* format, ...)
 		this->StatusText.SetWindowText(_T(""));
 	}
 }
+
+
