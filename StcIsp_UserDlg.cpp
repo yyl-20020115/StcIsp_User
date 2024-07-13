@@ -51,7 +51,7 @@ static CString GetFileMD5(const CString& fileName)
 	return MD5Return;
 
 }
-static void GetSerialPorts(std::vector<int>& ports, size_t maxlen = 1ULL<<20)
+static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL<<20)
 {
 	//Make sure we clear out any elements which may already be in the array
 	ports.clear();
@@ -73,7 +73,7 @@ static void GetSerialPorts(std::vector<int>& ports, size_t maxlen = 1ULL<<20)
 
 				//If it looks like "COMX" then
 				//add it to the array which will be returned
-				int nLen = _tcslen(pszCurrentDevice);
+				size_t nLen = _tcslen(pszCurrentDevice);
 				if (nLen > 3 && _tcsnicmp(pszCurrentDevice, _T("COM"), 3) == 0)
 				{
 					//Work out the port number
@@ -119,7 +119,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	_this->ProgressDownload.SetRange32(0, (int)_this->CodeLength);
 	_this->ProgressDownload.SetPos(0);
 
-	int com_number = _this->ComboPorts.GetItemData(index);
+	int com_number = (int)_this->ComboPorts.GetItemData(index);
 	if (!_this->OpenComm(com_number))
 	{
 		AfxMessageBox(_T("端口打开失败 !"), 0, 0);
@@ -405,7 +405,6 @@ END_MESSAGE_MAP()
 
 CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_STCISP_USER_DIALOG, pParent)
-	, IsCodeReady(FALSE)
 	, CodePath()
 	, LastMD5()
 	, CommHandle(INVALID_HANDLE_VALUE)
@@ -579,11 +578,8 @@ void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 		_T("代码文件 (*.bin; *.hex)|*.bin; *.hex|所有文件 (*.*)|*.*||"));
 	if (dialog.DoModal()) {
 		CString path = dialog.GetPathName();
-		this->IsCodeReady = CheckAndLoadCodeFile(path);
-		this->DownloadButton.EnableWindow(
-			this->IsCodeReady
-		);
-		if (this->IsCodeReady) {
+		if (CheckAndLoadCodeFile(path)) {
+			this->DownloadButton.EnableWindow(TRUE);
 			theApp.WriteProfileString(_T("Config"), _T("Path"), this->CodePath);
 		}
 	}
@@ -817,9 +813,6 @@ void CStcIspUserDlg::SetStatusText(const TCHAR* format, ...)
 	}
 }
 
-
-
-
 void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	switch (nIDEvent) {
@@ -831,8 +824,10 @@ void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 				this->FileChanged = CheckAndLoadCodeFile(
 					this->CodePath, 
 					FALSE);
-				if(this->FileChanged)
+				if (this->FileChanged) {
 					this->LastMD5 = MD5;
+					this->DownloadButton.EnableWindow(TRUE);
+				}
 			}
 			else {
 				this->FileChanged = FALSE;

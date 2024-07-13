@@ -45,7 +45,6 @@ public:
 	CButton DownloadButton;
 	CButton OpenButton;
 protected:
-	BOOL IsCodeReady;
 	CString CodePath;
 	CString LastMD5;
 	HANDLE CommHandle;
