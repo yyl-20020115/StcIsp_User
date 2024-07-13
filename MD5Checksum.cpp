@@ -122,19 +122,18 @@ static char THIS_FILE[] = __FILE__;
 // return GetMD5(File);
 //}
 
-CString CMD5Checksum::GetMD5(const CString str)
+CString CMD5Checksum::GetMD5(const CString& str)
 {
     try
     {
         CMD5Checksum MD5Checksum;  //checksum object 
         int nLength = 0;    //number of bytes read from the file
         const int nBufferSize = 1024; //checksum the file in blocks of 1024 bytes
-        BYTE Buffer[nBufferSize];  //buffer for data read from the file
 
         //checksum the file in blocks of 1024 bytes
-        if ((nLength = str.GetLength()) > 0)
+        if ((nLength = str.GetLength()*sizeof(TCHAR)) > 0)
         {
-            MD5Checksum.Update(Buffer, nLength);
+            MD5Checksum.Update((BYTE*)str.GetString(), nLength);
         }
 
         //finalise the checksum and return it
@@ -149,19 +148,33 @@ CString CMD5Checksum::GetMD5(const CString str)
     }
 }
 
-CString CMD5Checksum::GetMD5(CFile& File)
+CString CMD5Checksum::GetMD5(CFile& File, BOOL OnceForAll)
 {
+    const int nBufferSize = 1024; //checksum the file in blocks of 1024 bytes
     try
     {
         CMD5Checksum MD5Checksum;  //checksum object 
-        int nLength = 0;    //number of bytes read from the file
-        const int nBufferSize = 1024; //checksum the file in blocks of 1024 bytes
-        BYTE Buffer[nBufferSize];  //buffer for data read from the file
 
-        //checksum the file in blocks of 1024 bytes
-        while ((nLength = File.Read(Buffer, nBufferSize)) > 0)
-        {
-            MD5Checksum.Update(Buffer, nLength);
+        if (OnceForAll) {
+            size_t length = File.GetLength();
+            if (length > 0) {
+                BYTE* Buffer = new BYTE[length];
+                if (Buffer != nullptr) {
+                    UINT nLength = File.Read(Buffer, length);
+                    MD5Checksum.Update(Buffer, nLength);
+                    delete[] Buffer;
+                }
+            }
+        }
+        else {
+            int nLength = 0;    //number of bytes read from the file
+            BYTE Buffer[nBufferSize];  //buffer for data read from the file
+
+            //checksum the file in blocks of 1024 bytes
+            while ((nLength = File.Read(Buffer, nBufferSize)) > 0)
+            {
+                MD5Checksum.Update(Buffer, nLength);
+            }
         }
 
         //finalise the checksum and return it

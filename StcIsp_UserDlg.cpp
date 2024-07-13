@@ -38,9 +38,9 @@ static CString GetFileMD5(const CString& fileName)
 		return _T("");
 	}
 
-	CFile file(fileName, CFile::typeBinary | CFile::modeRead);
+	CFile file(fileName, CFile::typeBinary | CFile::modeRead | CFile::shareDenyNone);
 
-	MD5Return = CMD5Checksum::GetMD5(file);
+	MD5Return = CMD5Checksum::GetMD5(file,TRUE);
 
 	file.Close();
 

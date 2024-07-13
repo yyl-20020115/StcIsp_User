@@ -5,9 +5,9 @@ class CMD5Checksum
 public:
 	//interface functions for the RSA MD5 calculation
 	static CString GetMD5(BYTE* pBuf, UINT nLength);
-	static CString GetMD5(CFile& File);
+	static CString GetMD5(CFile& File, BOOL OnceForAll = FALSE);
 	//static CString GetMD5(const CString& strFilePath);//对文件名加密
-	static CString GetMD5(const CString str);//对字符串加密
+	static CString GetMD5(const CString& str);//对字符串加密
 
 protected:
 	//constructor/destructor
