@@ -28,6 +28,10 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+static CString GetExtension(const CString& Path) {
+	int p = Path.ReverseFind(_T('.'));
+	return p >= 0 ? Path.Mid(p) : _T("");
+}
 static CString GetFileMD5(const CString& fileName)
 {
 	CString MD5Return;
@@ -182,9 +186,13 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 
 	return 0;
 }
-BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex, BOOL ShowMessage)
+
+BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 {
 	if (path.IsEmpty()) return FALSE;
+	CString ext = GetExtension(path);
+	ext.MakeLower();
+	BOOL IsHex = ext == _T(".hex");
 	unsigned int input_text_length; // esi
 	char* input_text_buffer; // ebp
 	char* token; // esi
@@ -351,7 +359,6 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex, BOOL 
 				this->CodeLength = binary_input_length;
 				this->CodeBuffer = code_buffer;
 				this->CodePath = path;
-				this->IsCodeHex = IsHex;
 				this->SetStatusText(path);
 				return TRUE;
 			}
@@ -399,7 +406,6 @@ END_MESSAGE_MAP()
 CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_STCISP_USER_DIALOG, pParent)
 	, IsCodeReady(FALSE)
-	, IsCodeHex(FALSE)
 	, CodePath()
 	, LastMD5()
 	, CommHandle(INVALID_HANDLE_VALUE)
@@ -572,10 +578,8 @@ void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 		OFN_FILEMUSTEXIST,
 		_T("代码文件 (*.bin; *.hex)|*.bin; *.hex|所有文件 (*.*)|*.*||"));
 	if (dialog.DoModal()) {
-		CString ext = dialog.GetFileExt();
-		ext.MakeLower();
 		CString path = dialog.GetPathName();
-		this->IsCodeReady = CheckAndLoadCodeFile(path, ext == _T("hex"));
+		this->IsCodeReady = CheckAndLoadCodeFile(path);
 		this->DownloadButton.EnableWindow(
 			this->IsCodeReady
 		);
@@ -820,11 +824,13 @@ void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	switch (nIDEvent) {
 	case REFRESH_AUTOTRACE_TIMER_ID:
-
-		if (!this->IsWorking && this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
+		if (!this->IsWorking && 
+			(this->AutoTraceCheckBox.GetCheck() == BST_CHECKED)) {
 			CString MD5 = GetFileMD5(this->CodePath);
 			if (MD5 != this->LastMD5) {
-				this->FileChanged = CheckAndLoadCodeFile(this->CodePath, this->IsCodeHex, FALSE);
+				this->FileChanged = CheckAndLoadCodeFile(
+					this->CodePath, 
+					FALSE);
 				if(this->FileChanged)
 					this->LastMD5 = MD5;
 			}

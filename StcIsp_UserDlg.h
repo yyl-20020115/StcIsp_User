@@ -46,7 +46,6 @@ public:
 	CButton OpenButton;
 protected:
 	BOOL IsCodeReady;
-	BOOL IsCodeHex;
 	CString CodePath;
 	CString LastMD5;
 	HANDLE CommHandle;
@@ -58,7 +57,7 @@ protected:
 	CWinThread* WorkingThread;
 protected:
 
-	BOOL CheckAndLoadCodeFile(const CString& path, BOOL IsHex, BOOL ShowMessage = TRUE);
+	BOOL CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage = TRUE);
 
 	BOOL DoCloseHandle();
 
