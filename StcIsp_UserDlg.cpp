@@ -7,21 +7,36 @@
 #include "StcIsp_User.h"
 #include "StcIsp_UserDlg.h"
 #include "afxdialogex.h"
+#define HEAD_SIGN 0x23
+#define TAIL_SIGN 0x24
+
+#define DFU_CMD_CONNECT         0xa0
+#define DFU_CMD_READ            0xa1
+#define DFU_CMD_PROGRAM         0xa2
+#define DFU_CMD_ERASE           0xa3
+#define DFU_CMD_REBOOT          0xa4
+
+#define STATUS_OK               0x00
+#define STATUS_ERRORCMD         0x01
+#define STATUS_OUTOFRANGE       0x02
+#define STATUS_PROGRAMERR       0x03
+#define STATUS_ERRORWRAP        0xff
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-UINT CStcIspUserDlg::Download(LPVOID param) {
+UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	if (param == nullptr) return 0;
 
 	CStcIspUserDlg* _this = reinterpret_cast<CStcIspUserDlg*>(param);
 
-	unsigned int current;
-	int index; 
-	unsigned char* ptr; 
-	int left_count;
-	unsigned char ret[4] = { 0 };
+	int index = 0;
+	int left_count = 0;
+	unsigned int current = 0;
+	unsigned char* ptr;
+	unsigned char ret[128] = { 0 };
 
 	current = 0;
 	_this->SetStatusText();
@@ -34,21 +49,21 @@ UINT CStcIspUserDlg::Download(LPVOID param) {
 	if (_this->OpenComm(index + 1))
 	{
 		_this->SetStatusText(_T("连接目标芯片 ..."));
-		if (_this->WriteComm(0xA0, 0, 0, 0) && _this->ReadComm(ret, 100u))
+		if (_this->WriteComm(DFU_CMD_CONNECT, 0, 0, 0) && _this->ReadComm(ret, 100))
 		{
 			_this->SetStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), ret[0], ret[1]);
 			_this->SetStatusText(_T("正在擦除芯片 ... "));
-			if (_this->WriteComm(0xA3, 0, 0, 0) && _this->ReadComm(ret, 5000u))
+			if (_this->WriteComm(DFU_CMD_ERASE, 0, 0, 0) && _this->ReadComm(ret, 5000))
 			{
 				_this->SetStatusText(_T("正在下载代码 ... "));
 				if (_this->Length <= 0)
 				{
-				LABEL_17:
-					_this->WriteComm(0xA4, 0, 0, 0);
+				DO_REBOOT:
+					_this->WriteComm(DFU_CMD_REBOOT, 0, 0, 0);
 					_this->SetStatusText(_T("代码下载成功 !"));
-					goto LABEL_21;
+					goto DO_CLOSE;
 				}
-				while (1)
+				while (TRUE)
 				{
 					ptr = _this->Source + current;
 					if (*ptr == -1)
@@ -63,11 +78,12 @@ UINT CStcIspUserDlg::Download(LPVOID param) {
 							left_count = 0x10000 - current;
 						}
 						memcpy(ret, ptr, left_count);
-						if (!_this->WriteComm(162, current, left_count, ret) 
-							|| !_this->ReadComm(ret, 0x64u))
+						if (!_this->WriteComm(DFU_CMD_PROGRAM,
+							current, left_count, ret)
+							|| !_this->ReadComm(ret, 100))
 						{
 							_this->SetStatusText(_T("下载失败 !"));
-							goto LABEL_21;
+							goto DO_CLOSE;
 						}
 						current += left_count;
 
@@ -76,7 +92,7 @@ UINT CStcIspUserDlg::Download(LPVOID param) {
 						//SendMessage(*((HWND*)this + 80), 0x402u, 100 * current / *((_DWORD*)this + 142), 0);
 					}
 					if (current >= _this->Length)
-						goto LABEL_17;
+						goto DO_REBOOT;
 				}
 			}
 			_this->SetStatusText(_T("擦除失败 !"));
@@ -85,7 +101,7 @@ UINT CStcIspUserDlg::Download(LPVOID param) {
 		{
 			_this->SetStatusText(_T("连接失败 !"));
 		}
-	LABEL_21:
+	DO_CLOSE:
 		_this->DoCloseHandle();
 	}
 	else
@@ -109,17 +125,17 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 	char* pch_next; // esi
 	char v10; // al
 	char* v11; // esi
-	TCHAR v12; // al
-	TCHAR v13; // cl
-	TCHAR v14; // dl
-	TCHAR v15; // al
+	char v12; // al
+	char v13; // cl
+	char v14; // dl
+	char v15; // al
 	unsigned int v16; // eax
-	TCHAR v17; // dl
+	char v17; // dl
 	__int16 v18; // bx
 	char* v19; // esi
 	unsigned int v20; // eax
 	int v21; // ebx
-	TCHAR v22; // al
+	char v22; // al
 	char* v23; // esi
 	int v24; // al
 	bool v25; // zf
@@ -140,7 +156,7 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 	TCHAR v41; // [esp+26h] [ebp-22h]
 	TCHAR v42; // [esp+27h] [ebp-21h]
 	CFile file;
-	if (!file.Open(path, CFile::shareDenyNone|CFile::typeBinary, 0))
+	if (!file.Open(path, CFile::shareDenyNone | CFile::typeBinary, 0))
 	{
 		AfxMessageBox(_T("打开文件失败 !"), 0, 0);
 		return FALSE;
@@ -218,8 +234,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 		v40 = v19[1];
 		if ((unsigned __int8)strtoul(&Str, 0, 16) + (unsigned char)v21)
 		{
-			delete [] target_buffer;
-			delete [] buffer;
+			delete[] target_buffer;
+			delete[] buffer;
 			AfxMessageBox(_T("HEX文件数据错误 !"), 0, 0);
 			return FALSE;
 		}
@@ -237,7 +253,7 @@ free_target_buffer:
 	buffer2 = (unsigned char*)target_buffer;
 	length = length2;
 for_binary:
-	if (buffer2 !=nullptr && *buffer2 == 2)
+	if (buffer2 != nullptr && *buffer2 == 2)
 	{
 		sign_value = (((unsigned short)buffer2[1]) << 8) | (buffer2[2]);
 		if (sign_value > 0x1003u)
@@ -272,8 +288,8 @@ for_binary:
 						output_text_buffer = pout;
 					}
 					this->HexEdit.SetWindowText(output_text_buffer);
-					delete [] output_text_buffer;
-					if (this->Source!=nullptr)
+					delete[] output_text_buffer;
+					if (this->Source != nullptr)
 					{
 						delete[] this->Source;
 						this->Source = 0;
@@ -289,7 +305,7 @@ for_binary:
 			}
 		}
 	}
-	delete [] buffer2;
+	delete[] buffer2;
 	AfxMessageBox(_T("代码文件不规范 !"), 0, 0);
 	return FALSE;
 }
@@ -469,7 +485,7 @@ void CStcIspUserDlg::OnBnClickedCancel()
 
 void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 {
-	CFileDialog dialog(TRUE, _T("hex"),0, OFN_FILEMUSTEXIST,
+	CFileDialog dialog(TRUE, _T("hex"), 0, OFN_FILEMUSTEXIST,
 		_T("代码文件 (*.bin; *.hex)|*.bin; *.hex|所有文件 (*.*)|*.*||"));
 	if (dialog.DoModal()) {
 		CString ext = dialog.GetFileExt();
@@ -483,26 +499,24 @@ void CStcIspUserDlg::OnBnClickedButtonDownload()
 {
 	if (!this->IsCodeReady) {
 		if (this->CodePath.GetLength() > 0) {
-			if (this->IsCodeReady = this->CheckAndLoadCodeFile(this->CodePath, this->IsCodeHex))
-			{
-				AfxBeginThread(Download, this);
-			}
+			if (this->IsCodeReady 
+				= this->CheckAndLoadCodeFile(
+					this->CodePath, this->IsCodeHex))
+				AfxBeginThread(DoDownload, this);
 		}
 		else {
 			MessageBox(_T("需要先打开代码文件!"), 0, MB_ICONWARNING);
-
 		}
 	}
 	else {
-
-
+		AfxBeginThread(DoDownload, this);
 	}
 }
 
 
 void CStcIspUserDlg::OnBnClickedButtonStop()
 {
-	// TODO: 在此添加控件通知处理程序代码
+	this->IsWorking = FALSE;
 }
 
 
@@ -518,16 +532,16 @@ BOOL CStcIspUserDlg::DoCloseHandle()
 
 BOOL CStcIspUserDlg::OpenComm(int port)
 {
-	COMMTIMEOUTS CommTimeouts = { 0 };
-	DCB DCB = { 0 };
 	DoCloseHandle();
 
+	COMMTIMEOUTS CommTimeouts = { 0 };
+	DCB DCB = { 0 };
 	CString fn;
-	fn.Format(_T("\\\\.\\com%d"), port);
-	this->CommHandle = CreateFile(fn, 0xC0000000, 0, 0, 3, 0, 0);
+	fn.Format(_T("\\\\.\\COM%d"), port);
+	this->CommHandle = CreateFile(fn, GENERIC_READ|GENERIC_WRITE, 0, 0, 3, 0, 0);
 	if (this->CommHandle != INVALID_HANDLE_VALUE)
 	{
-		SetupComm(this->CommHandle, 0x2000, 0x2000);
+		SetupComm(this->CommHandle, 8192, 8192);
 		CommTimeouts.ReadIntervalTimeout = 0;
 		CommTimeouts.ReadTotalTimeoutMultiplier = 10;
 		CommTimeouts.ReadTotalTimeoutConstant = 0;
@@ -538,43 +552,44 @@ BOOL CStcIspUserDlg::OpenComm(int port)
 		DCB.BaudRate = 115200;
 		DCB.fBinary = 1;
 		DCB.ByteSize = 8;
-		DCB.Parity = 0;
-		DCB.StopBits = 0;
+		DCB.Parity = 0; //NONE
+		DCB.StopBits = 0; //1,1.5,2
 		SetCommState(this->CommHandle, &DCB);
 		PurgeComm(this->CommHandle, 0x0F);
 	}
-	return this->CommHandle!=INVALID_HANDLE_VALUE;
+	return this->CommHandle != INVALID_HANDLE_VALUE;
 }
 
 BOOL CStcIspUserDlg::WriteComm(unsigned char function, unsigned int value, unsigned char length, const void* source)
 {
+	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 	BOOL done = FALSE;
-	if (this->CommHandle == INVALID_HANDLE_VALUE)
-		return done;
-
+	unsigned short high = (unsigned short)(value >> 16);
+	unsigned short low = (unsigned short)(value & 0xffff);
 	unsigned char sum = 0;
 	DWORD NumberOfBytesWritten = 0;
 	unsigned char* Buffer = new unsigned char[length + 10];
 	if (Buffer != nullptr) {
-		Buffer[0] = 35;
+		memset(Buffer, 0, length + 10);
+		Buffer[0] = HEAD_SIGN;
 		Buffer[1] = length + 6;
 		Buffer[2] = function;
-		Buffer[3] = (value >> 24) & 0xff;
-		Buffer[4] = (value >> 16) & 0xff;
-		Buffer[5] = (value >> 8) & 0xff;
-		Buffer[6] = (value & 0xff);
+		Buffer[3] = HIBYTE(high);
+		Buffer[4] = LOBYTE(high);
+		Buffer[5] = HIBYTE(low);
+		Buffer[6] = LOBYTE(low);
 		Buffer[7] = length;
 		if (length != 0 && source != 0)
 		{
 			memcpy(&Buffer[8], source, length);
 		}
-		Buffer[length + 8] = 36;
+		Buffer[length + 8] = TAIL_SIGN;
 		sum = Sum(Buffer, length + 9);
 		Buffer[length + 9] = -sum;
 		done = WriteFile(
-			this->CommHandle, 
-			Buffer, 
-			length + 10, 
+			this->CommHandle,
+			Buffer,
+			length + 10,
 			&NumberOfBytesWritten, 0);
 
 		delete[] Buffer;
@@ -584,36 +599,38 @@ BOOL CStcIspUserDlg::WriteComm(unsigned char function, unsigned int value, unsig
 
 BOOL CStcIspUserDlg::ReadComm(unsigned char* buffer, ULONGLONG ticks) const
 {
-	int mpos;
-	char sum;
-	int v6;
+	if (this->CommHandle == INVALID_HANDLE_VALUE)
+		return FALSE;
+
+	int stage;
 	int pos;
-	char bc;
-	unsigned char v9;
-	char v10;
-	signed int v11;
-	unsigned char v12;
+	int mpos;
+	int npos;
+	int sign;
+	unsigned char sum;
+	unsigned char bc;
+	unsigned char tag;
+	unsigned char rbc;
 	DWORD NumberOfBytesRead;
-	ULONGLONG first_tick;
 	DWORD Errors;
-	COMSTAT Stat = { 0 }; 
+	COMSTAT Stat = { 0 };
 	char Buffer[256] = { 0 };
 
-	if (this->CommHandle!=INVALID_HANDLE_VALUE)
-		return FALSE;
 	mpos = 0;
-	v11 = 0;
+	sign = 0;
 	sum = 0;
-	v6 = 0;
+	stage = 0;
 	pos = 0;
-	first_tick = GetTickCount64();
+	ULONGLONG tick = GetTickCount64();
 	while (TRUE)
 	{
 		ClearCommError(this->CommHandle, &Errors, &Stat);
-		NumberOfBytesRead = Stat.cbInQue;
-		if (Stat.cbInQue)
+		if (Stat.cbInQue > 0)
 		{
-			ReadFile(this->CommHandle, &Buffer[pos], Stat.cbInQue, &NumberOfBytesRead, 0);
+			if (!ReadFile(this->CommHandle,
+				Buffer + pos, Stat.cbInQue,
+				&NumberOfBytesRead, 0))
+				return FALSE;
 			pos += NumberOfBytesRead;
 		}
 		if (mpos < pos)
@@ -621,42 +638,42 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char* buffer, ULONGLONG ticks) const
 			bc = Buffer[mpos];
 			sum += bc;
 			++mpos;
-			switch (v6)
+			switch (stage)
 			{
 			case 0:
-				goto LABEL_18;
+				goto DoPrepare;
 			case 1:
-				v10 = bc;
-				v6 = 2;
+				rbc = bc;
+				stage = 2;
 				break;
 			case 2:
-				v9 = bc;
-				v12 = 0;
-				v6 = 3;
+				tag = bc;
+				npos = 0;
+				stage = 3;
 				if (!bc)
-					v6 = 4;
+					stage = 4;
 				break;
 			case 3:
-				if (buffer)
-					buffer[v12] = bc;
-				if (++v12 >= v9)
-					v6 = 4;
+				if (buffer != nullptr)
+					buffer[npos] = bc;
+				if (++npos >= tag)
+					stage = 4;
 				break;
 			case 4:
-				if (bc != 36)
-					goto LABEL_18;
-				v6 = 5;
+				if (bc != TAIL_SIGN)
+					goto DoPrepare;
+				stage = 5;
 				break;
 			case 5:
-				if (sum)
+				if (sum != 0)
 				{
-				LABEL_18:
+				DoPrepare:
 					sum = bc;
-					v6 = bc == 64;
+					stage = bc == 64;
 				}
 				else
 				{
-					v11 = 1;
+					sign = 1;
 				}
 				break;
 			default:
@@ -665,29 +682,29 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char* buffer, ULONGLONG ticks) const
 		}
 		if (!this->IsWorking)
 			break;
-		if (GetTickCount64() - first_tick >= ticks)
+		if (GetTickCount64() - tick >= ticks)
 			break;
-		if (v11)
-			goto LABEL_25;
+		if (sign)
+			goto BeforeReturn;
 	}
-	if (!v11)
+	if (sign == 0)
 		return FALSE;
-LABEL_25:
-	if (!v10)
+BeforeReturn:
+	if (rbc == 0)
 		return TRUE;
 	return FALSE;
 }
 unsigned char CStcIspUserDlg::Sum(unsigned char* buffer, int length)
 {
 	unsigned char result = 0;
-	for(int i = 0;i<length;i++)
+	for (int i = 0; i < length; i++)
 		result += *buffer++;
 	return result;
 }
 
 void CStcIspUserDlg::SetStatusText(TCHAR* format, ...)
 {
-	if (format!=nullptr)
+	if (format != nullptr)
 	{
 		va_list Args;
 		va_start(Args, format);

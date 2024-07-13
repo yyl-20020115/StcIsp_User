@@ -9,7 +9,7 @@
 class CStcIspUserDlg : public CDialogEx
 {
 public:
-	static UINT Download(LPVOID param);
+	static UINT DoDownload(LPVOID param);
 // 构造
 public:
 	CStcIspUserDlg(CWnd* pParent = nullptr);	// 标准构造函数
