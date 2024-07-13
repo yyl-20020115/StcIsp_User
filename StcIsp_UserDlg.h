@@ -78,4 +78,5 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnBnClickedCheckAutotrace();
 	afx_msg void OnBnClickedCheckAutodownload();
+	afx_msg void OnCbnSelchangeComboComports();
 };

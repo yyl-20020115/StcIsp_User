@@ -455,6 +455,7 @@ BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
 	ON_WM_TIMER()
 	ON_BN_CLICKED(IDC_CHECK_AUTOTRACE, &CStcIspUserDlg::OnBnClickedCheckAutotrace)
 	ON_BN_CLICKED(IDC_CHECK_AUTODOWNLOAD, &CStcIspUserDlg::OnBnClickedCheckAutodownload)
+	ON_CBN_SELCHANGE(IDC_COMBO_COMPORTS, &CStcIspUserDlg::OnCbnSelchangeComboComports)
 END_MESSAGE_MAP()
 
 BOOL CStcIspUserDlg::OnInitDialog()
@@ -496,9 +497,17 @@ BOOL CStcIspUserDlg::OnInitDialog()
 		}
 	}
 	if (this->ComboPorts.GetCount() > 0) {
-		this->ComboPorts.SetCurSel(0);
+		int index = 0;
+		CString text = theApp.GetProfileString(_T("Config"), _T("COMPort"), _T(""));
+		if(!text.IsEmpty())
+		{
+			index = this->ComboPorts.FindStringExact(-1, text);
+		}
+		this->ComboPorts.SetCurSel(index>=0?index:0);
 	}
-
+	this->SetStatusText(
+		this->CodePath = theApp.GetProfileStringW(_T("Config"), _T("Path"), _T(""))
+	);
 	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL,NULL);
 	}
@@ -558,15 +567,21 @@ void CStcIspUserDlg::OnBnClickedCancel()
 
 void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 {
-	CFileDialog dialog(TRUE, _T("hex"), 0, OFN_FILEMUSTEXIST,
+	CFileDialog dialog(TRUE, _T("hex"), 
+		this->CodePath.IsEmpty()?NULL:this->CodePath,
+		OFN_FILEMUSTEXIST,
 		_T("代码文件 (*.bin; *.hex)|*.bin; *.hex|所有文件 (*.*)|*.*||"));
 	if (dialog.DoModal()) {
 		CString ext = dialog.GetFileExt();
 		ext.MakeLower();
 		CString path = dialog.GetPathName();
+		this->IsCodeReady = CheckAndLoadCodeFile(path, ext == _T("hex"));
 		this->DownloadButton.EnableWindow(
-			CheckAndLoadCodeFile(path, ext == _T("hex"))
+			this->IsCodeReady
 		);
+		if (this->IsCodeReady) {
+			theApp.WriteProfileString(_T("Config"), _T("Path"), this->CodePath);
+		}
 	}
 }
 
@@ -852,5 +867,17 @@ void CStcIspUserDlg::OnBnClickedCheckAutodownload()
 	}
 	else {
 		this->KillTimer(REFRESH_AUTODOWNLOAD_TIMER_ID);
+	}
+}
+
+void CStcIspUserDlg::OnCbnSelchangeComboComports()
+{
+	int index = this->ComboPorts.GetCurSel();
+	CString text;
+	if (index >= 0) {
+		this->ComboPorts.GetLBText(index, text);
+	}
+	if (theApp.WriteProfileString(_T("Config"), _T("COMPort"), text)) {
+		text.Empty();
 	}
 }
