@@ -53,6 +53,7 @@ protected:
 	unsigned char* CodeBuffer;
 	unsigned long long CodeLength;
 	HANDLE QuitEvent;
+	HANDLE DoneEvent;
 	CWinThread* WorkingThread;
 protected:
 

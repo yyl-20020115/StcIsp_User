@@ -105,12 +105,12 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	if (_this->CodeLength == 0 || _this->CodeBuffer == nullptr) return 0;
 	int index = _this->ComboPorts.GetCurSel();
 	if (index < 0) return 0;
-
+	_this->IsWorking = TRUE;
 	int page_size = 0;
 	unsigned int address = 0;
 	unsigned char* ptr = nullptr;
 	unsigned char buffer[PAGE_SIZE] = { 0 };
-
+	DWORD WaitResult = 0;
 	_this->SetStatusText();
 	_this->OpenButton.EnableWindow(FALSE);
 	_this->DownloadButton.EnableWindow(FALSE);
@@ -142,7 +142,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 			else
 			{
 				_this->SetStatusText(_T("正在下载代码 ... "));
-				while (WaitForSingleObject(_this->QuitEvent,1)!=WAIT_OBJECT_0)
+				while ((WaitResult=WaitForSingleObject(_this->QuitEvent,0))!=WAIT_OBJECT_0)
 				{
 					ptr = _this->CodeBuffer + address;
 					if (*ptr == 0xff) //skip 0xff bytes
@@ -173,17 +173,22 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 						_this->WriteComm(DFU_CMD_REBOOT, 0, 0, 0);
 						_this->DoCloseHandle();
 						_this->SetStatusText(_T("代码下载成功 !"));
+						break;
 					}
 				}
 			}
 		}
 	}
 
+	::InterlockedExchangePointer((void**)&_this->WorkingThread, nullptr);
+	if (WaitResult == WAIT_OBJECT_0) {
+		_this->SetStatusText(_T("代码下载被终止 !"));
+	}
 	_this->OpenButton.EnableWindow(TRUE);
-	_this->DownloadButton.EnableWindow(_this->CodeBuffer != nullptr);
 	_this->StopButton.EnableWindow(FALSE);
-	_this->IsWorking = FALSE;
+	_this->DownloadButton.EnableWindow(_this->CodeBuffer != nullptr);
 
+	_this->IsWorking = FALSE;
 	return 0;
 }
 
@@ -413,10 +418,12 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	, CodeBuffer(nullptr)
 	, CodeLength(0)
 	, QuitEvent(INVALID_HANDLE_VALUE)
+	, DoneEvent(INVALID_HANDLE_VALUE)
 	, WorkingThread(nullptr)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	this->QuitEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	this->DoneEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
 CStcIspUserDlg::~CStcIspUserDlg()
@@ -589,6 +596,9 @@ void CStcIspUserDlg::OnBnClickedButtonDownload()
 {
 	if (this->WorkingThread == nullptr) {
 		this->WorkingThread = AfxBeginThread(DoDownload, this);
+		if (this->WorkingThread != nullptr) {
+			this->DoneEvent = this->WorkingThread->m_hThread;
+		}
 	}
 }
 
@@ -601,11 +611,9 @@ void CStcIspUserDlg::OnClose()
 void CStcIspUserDlg::OnBnClickedButtonStop()
 {
 	this->StopButton.EnableWindow(FALSE);
+
 	if (this->WorkingThread != nullptr) {
 		SetEvent(this->QuitEvent);
-		WaitForSingleObject(this->WorkingThread->m_hThread, INFINITE);
-		delete this->WorkingThread;
-		this->WorkingThread = nullptr;
 	}
 }
 
@@ -689,28 +697,27 @@ BOOL CStcIspUserDlg::WriteComm(unsigned char function, unsigned int value, unsig
 
 BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) const
 {
-	if (this->CommHandle == INVALID_HANDLE_VALUE)
-		return FALSE;
+	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 
 	int stage;
-	int pos;
-	int mpos;
-	int npos;
+	int buffer_pos;
+	int payload_pos;
+	int payload_count;
 	int sign;
 	unsigned char sum;
 	unsigned char bc;
-	unsigned char tag;
+	unsigned char payload_length;
 	unsigned char rbc;
 	DWORD NumberOfBytesRead;
 	DWORD Errors;
 	COMSTAT Stat = { 0 };
 	char frame_buffer[256] = { 0 };
 
-	mpos = 0;
+	payload_pos = 0;
 	sign = 0;
 	sum = 0;
 	stage = 0;
-	pos = 0;
+	buffer_pos = 0;
 	ULONGLONG tick = GetTickCount64();
 	while (TRUE)
 	{
@@ -719,26 +726,26 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) c
 		if (to_read_bytes > sizeof(input)) {
 			to_read_bytes = sizeof(input);
 		}
-		Stat.cbInQue -= sizeof(input);
+		Stat.cbInQue -= to_read_bytes;
 		if (to_read_bytes > 0)
 		{
 			if (!ReadFile(this->CommHandle,
-				frame_buffer + pos, to_read_bytes,
+				frame_buffer + buffer_pos, to_read_bytes,
 				&NumberOfBytesRead, 0))
 				return FALSE;
-			pos += NumberOfBytesRead;
+			buffer_pos += NumberOfBytesRead;
 		}
-		if (mpos < pos)
+		if (payload_pos < buffer_pos)
 		{
-			bc = frame_buffer[mpos];
+			bc = frame_buffer[payload_pos];
 			sum += bc;
-			++mpos;
+			++payload_pos;
 			switch (stage)
 			{
 			case 0:
 			{
 				sum = bc;
-				stage = bc == 64;
+				stage = bc == '@';
 				break;
 			}
 			case 1:
@@ -746,22 +753,22 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) c
 				stage = 2;
 				break;
 			case 2:
-				tag = bc;
-				npos = 0;
+				payload_length = bc;
+				payload_count = 0;
 				stage = 3;
 				if (bc == 0) stage = 4;
 				break;
 			case 3:
 				if (input != nullptr)
-					input[npos] = bc;
-				if (++npos >= tag)
+					input[payload_count] = bc;
+				if (++payload_count >= payload_length)
 					stage = 4;
 				break;
 			case 4:
 				if (bc != TAIL_SIGN)
 				{
 					sum = bc;
-					stage = bc == 64;
+					stage = bc == '@';
 				}
 				stage = 5;
 				break;
@@ -769,7 +776,7 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) c
 				if (sum != 0)
 				{
 					sum = bc;
-					stage = bc == 64;
+					stage = bc == '@';
 				}
 				else
 				{
