@@ -4,6 +4,7 @@
 
 #pragma once
 
+#define PAGE_SIZE 128
 
 // CStcIspUserDlg 对话框
 class CStcIspUserDlg : public CDialogEx
@@ -13,6 +14,7 @@ public:
 // 构造
 public:
 	CStcIspUserDlg(CWnd* pParent = nullptr);	// 标准构造函数
+	~CStcIspUserDlg();
 
 // 对话框数据
 #ifdef AFX_DESIGN_TIME
@@ -51,8 +53,8 @@ protected:
 	CString CodePath;
 	HANDLE CommHandle;
 	BOOL IsWorking;
-	unsigned char* Source;
-	unsigned long long Length;
+	unsigned char* CodeBuffer;
+	unsigned long long CodeLength;
 protected:
 
 	BOOL CheckAndLoadCodeFile(const CString& path, BOOL IsHex);
@@ -61,12 +63,12 @@ protected:
 
 	BOOL OpenComm(int port);
 	
-	BOOL WriteComm(unsigned char function, unsigned int value, unsigned char length, const void* source);
+	BOOL WriteComm(unsigned char function, unsigned int value, unsigned char length, unsigned char buffer[PAGE_SIZE]);
 
-	BOOL ReadComm(unsigned char* buffer, ULONGLONG ticks) const;
+	BOOL ReadComm(unsigned char buffer[PAGE_SIZE], ULONGLONG ticks) const;
 
 	unsigned char Sum(unsigned char* buffer, int length);
 
-	void SetStatusText(TCHAR* format = nullptr, ...);
+	void SetStatusText(const TCHAR* format = nullptr, ...);
 
 };
