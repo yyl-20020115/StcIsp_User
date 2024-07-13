@@ -22,6 +22,8 @@ void tm0_isr() interrupt 1
 
 void main()
 {
+	P32 = 0;
+	P32 = 1;
     sys_init();
     
     while (1)

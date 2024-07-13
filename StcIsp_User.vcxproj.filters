@@ -36,6 +36,9 @@
     <ClInclude Include="CColorEdit.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="MD5Checksum.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="StcIsp_User.cpp">
@@ -48,6 +51,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CColorEdit.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MD5Checksum.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

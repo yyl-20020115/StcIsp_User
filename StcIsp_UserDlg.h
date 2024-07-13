@@ -1,8 +1,4 @@
-﻿
-// StcIsp_UserDlg.h: 头文件
-//
-
-#pragma once
+﻿#pragma once
 #include "CColorEdit.h"
 
 #define PAGE_SIZE 128
@@ -52,15 +48,17 @@ protected:
 	BOOL IsCodeReady;
 	BOOL IsCodeHex;
 	CString CodePath;
+	CString LastMD5;
 	HANDLE CommHandle;
 	BOOL IsWorking;
+	BOOL FileChanged;
 	unsigned char* CodeBuffer;
 	unsigned long long CodeLength;
 	HANDLE QuitEvent;
 	CWinThread* WorkingThread;
 protected:
 
-	BOOL CheckAndLoadCodeFile(const CString& path, BOOL IsHex);
+	BOOL CheckAndLoadCodeFile(const CString& path, BOOL IsHex, BOOL ShowMessage = TRUE);
 
 	BOOL DoCloseHandle();
 
@@ -75,4 +73,9 @@ protected:
 	void SetStatusText(const TCHAR* format = nullptr, ...);
 public:
 	afx_msg void OnClose();
+	CButton AutoTraceCheckBox;
+	CButton AutoDownloadCheckBox;
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnBnClickedCheckAutotrace();
+	afx_msg void OnBnClickedCheckAutodownload();
 };

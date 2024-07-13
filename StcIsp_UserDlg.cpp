@@ -3,6 +3,9 @@
 #include "StcIsp_User.h"
 #include "StcIsp_UserDlg.h"
 #include "afxdialogex.h"
+#include "MD5Checksum.h"
+#include <vector>
+#include <algorithm>
 #define HEAD_SIGN 0x23
 #define TAIL_SIGN 0x24
 #define BLOCK_SIZE 4096
@@ -19,10 +22,78 @@
 #define STATUS_PROGRAMERR       0x03
 #define STATUS_ERRORWRAP        0xff
 
-
+#define REFRESH_AUTOTRACE_TIMER_ID			0x100
+#define REFRESH_AUTODOWNLOAD_TIMER_ID		0x200
+#define REFRESH_TIMER_INTERVAL	500
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+static CString GetFileMD5(const CString& fileName)
+{
+	CString MD5Return;
+	CFileFind  finder;
+
+	if (!finder.FindFile(fileName))
+	{
+		return _T("");
+	}
+
+	CFile file(fileName, CFile::typeBinary | CFile::modeRead);
+
+	MD5Return = CMD5Checksum::GetMD5(file);
+
+	file.Close();
+
+	return MD5Return;
+
+}
+static void GetSerialPorts(std::vector<int>& ports, size_t maxlen = 1ULL<<20)
+{
+	//Make sure we clear out any elements which may already be in the array
+	ports.clear();
+	//Use QueryDosDevice to look for all devices of the form COMx. This is a better
+	//solution as it means that no ports have to be opened at all.
+	TCHAR* szDevices = new TCHAR[maxlen];
+	if (szDevices != nullptr) {
+		memset(szDevices, 0, maxlen * sizeof(TCHAR));
+
+		DWORD dwChars = QueryDosDevice(NULL, szDevices, maxlen);
+		if (dwChars)
+		{
+			int i = 0;
+
+			for (;;)
+			{
+				//Get the current device name
+				TCHAR* pszCurrentDevice = &szDevices[i];
+
+				//If it looks like "COMX" then
+				//add it to the array which will be returned
+				int nLen = _tcslen(pszCurrentDevice);
+				if (nLen > 3 && _tcsnicmp(pszCurrentDevice, _T("COM"), 3) == 0)
+				{
+					//Work out the port number
+					int nPort = _ttoi(&pszCurrentDevice[3]);
+					ports.push_back(nPort);
+				}
+
+				// Go to next NULL character
+				while (szDevices[i] != _T('\0'))
+					i++;
+
+				// Bump pointer to the next string
+				i++;
+
+				// The list is double-NULL terminated, so if the character is
+				// now NULL, we're at the end
+				if (szDevices[i] == _T('\0'))
+					break;
+			}
+		}
+		delete[] szDevices;
+	}
+	std::sort(ports.begin(), ports.end());
+}
 
 UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	if (param == nullptr) return 0;
@@ -42,7 +113,10 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	_this->StopButton.EnableWindow(TRUE);
 
 	_this->ProgressDownload.SetRange32(0, (int)_this->CodeLength);
-	if (!_this->OpenComm(index + 1))
+	_this->ProgressDownload.SetPos(0);
+
+	int com_number = _this->ComboPorts.GetItemData(index);
+	if (!_this->OpenComm(com_number))
 	{
 		AfxMessageBox(_T("端口打开失败 !"), 0, 0);
 	}
@@ -108,8 +182,9 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 
 	return 0;
 }
-BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
+BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex, BOOL ShowMessage)
 {
+	if (path.IsEmpty()) return FALSE;
 	unsigned int input_text_length; // esi
 	char* input_text_buffer; // ebp
 	char* token; // esi
@@ -126,7 +201,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 	CFile file;
 	if (!file.Open(path, CFile::shareDenyNone | CFile::typeBinary, 0))
 	{
-		AfxMessageBox(_T("打开文件失败 !"), 0, 0);
+		if(ShowMessage)
+			AfxMessageBox(_T("打开文件失败 !"), 0, 0);
 		return FALSE;
 	}
 	input_text_length = (unsigned int)file.GetLength();
@@ -200,7 +276,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 						{
 							delete[] code_buffer;
 							delete[] input_text_buffer;
-							AfxMessageBox(_T("HEX文件数据错误 !"), 0, 0);
+							if (ShowMessage)
+								AfxMessageBox(_T("HEX文件数据错误 !"), 0, 0);
 							return FALSE;
 						}
 					}
@@ -281,7 +358,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL IsHex)
 		}
 	}
 	delete[] code_buffer;
-	AfxMessageBox(_T("代码文件不规范, 无法加载 !"), 0, 0);
+	if (ShowMessage)
+		AfxMessageBox(_T("代码文件不规范, 无法加载 !"), 0, 0);
 	return FALSE;
 }
 
@@ -323,8 +401,10 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	, IsCodeReady(FALSE)
 	, IsCodeHex(FALSE)
 	, CodePath()
+	, LastMD5()
 	, CommHandle(INVALID_HANDLE_VALUE)
 	, IsWorking(FALSE)
+	, FileChanged(FALSE)
 	, CodeBuffer(nullptr)
 	, CodeLength(0)
 	, QuitEvent(INVALID_HANDLE_VALUE)
@@ -357,6 +437,8 @@ void CStcIspUserDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON_DOWNLOAD, DownloadButton);
 	DDX_Control(pDX, IDC_BUTTON_OPEN_FILE, OpenButton);
 	DDX_Control(pDX, IDC_EDIT_HEX, HexEdit);
+	DDX_Control(pDX, IDC_CHECK_AUTOTRACE, AutoTraceCheckBox);
+	DDX_Control(pDX, IDC_CHECK_AUTODOWNLOAD, AutoDownloadCheckBox);
 }
 
 BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
@@ -370,6 +452,9 @@ BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_STOP, &CStcIspUserDlg::OnBnClickedButtonStop)
 	ON_WM_CTLCOLOR()
 	ON_WM_CLOSE()
+	ON_WM_TIMER()
+	ON_BN_CLICKED(IDC_CHECK_AUTOTRACE, &CStcIspUserDlg::OnBnClickedCheckAutotrace)
+	ON_BN_CLICKED(IDC_CHECK_AUTODOWNLOAD, &CStcIspUserDlg::OnBnClickedCheckAutodownload)
 END_MESSAGE_MAP()
 
 BOOL CStcIspUserDlg::OnInitDialog()
@@ -399,14 +484,28 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	this->DownloadButton.EnableWindow(FALSE);
 	this->StopButton.EnableWindow(FALSE);
 	this->HexEdit.SetBackColor(RGB(0xff, 0xff, 0xff));
-	for (int i = 1; i < 256; i++) {
+	std::vector<int> ports;
+	GetSerialPorts(ports);
+	for (int i = 0; i < ports.size(); i++) {
 		CString com_name;
-		com_name.Format(_T("COM%d"), i);
-		this->ComboPorts.InsertString(i - 1, com_name);
+		int com_number = ports[i];
+		com_name.Format(_T("COM%d"), com_number);
+		int index = this->ComboPorts.AddString(com_name);
+		if (index >= 0) {
+			this->ComboPorts.SetItemData(index, com_number);
+		}
 	}
 	if (this->ComboPorts.GetCount() > 0) {
 		this->ComboPorts.SetCurSel(0);
 	}
+
+	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
+		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL,NULL);
+	}
+	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
+		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
+	}
+
 	return TRUE;
 }
 
@@ -473,19 +572,14 @@ void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 
 void CStcIspUserDlg::OnBnClickedButtonDownload()
 {
-	if (this->WorkingThread != nullptr) {
+	if (this->WorkingThread == nullptr) {
 		this->WorkingThread = AfxBeginThread(DoDownload, this);
 	}
 }
 
 void CStcIspUserDlg::OnClose()
 {
-	if (this->WorkingThread != nullptr) {
-		SetEvent(this->QuitEvent);
-		WaitForSingleObject(this->WorkingThread->m_hThread, INFINITE);
-		delete this->WorkingThread;
-		this->WorkingThread = nullptr;
-	}
+	this->OnBnClickedButtonStop();
 	CDialogEx::OnClose();
 }
 
@@ -705,3 +799,58 @@ void CStcIspUserDlg::SetStatusText(const TCHAR* format, ...)
 }
 
 
+
+
+void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	switch (nIDEvent) {
+	case REFRESH_AUTOTRACE_TIMER_ID:
+
+		if (!this->IsWorking && this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
+			CString MD5 = GetFileMD5(this->CodePath);
+			if (MD5 != this->LastMD5) {
+				this->FileChanged = CheckAndLoadCodeFile(this->CodePath, this->IsCodeHex, FALSE);
+				if(this->FileChanged)
+					this->LastMD5 = MD5;
+			}
+			else {
+				this->FileChanged = FALSE;
+			}
+		}
+		break;
+	case REFRESH_AUTODOWNLOAD_TIMER_ID:
+		if (!this->IsWorking && this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
+			if (this->FileChanged) {
+				this->FileChanged = FALSE;
+				this->OnBnClickedButtonDownload();
+			}
+		}
+		break;
+	}
+
+	CDialogEx::OnTimer(nIDEvent);
+}
+
+
+void CStcIspUserDlg::OnBnClickedCheckAutotrace()
+{
+	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
+		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
+	}
+	else {
+		this->KillTimer(REFRESH_AUTOTRACE_TIMER_ID);
+	}
+}
+
+
+void CStcIspUserDlg::OnBnClickedCheckAutodownload()
+{
+	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
+		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
+		this->AutoTraceCheckBox.SetCheck(BST_CHECKED);
+		this->OnBnClickedCheckAutotrace();
+	}
+	else {
+		this->KillTimer(REFRESH_AUTODOWNLOAD_TIMER_ID);
+	}
+}
