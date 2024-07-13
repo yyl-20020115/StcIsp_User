@@ -5,6 +5,7 @@
 #include "afxdialogex.h"
 #include "MD5Checksum.h"
 #include <vector>
+#include <chrono>
 #include <algorithm>
 #define HEAD_SIGN 0x23
 #define TAIL_SIGN 0x24
@@ -695,7 +696,7 @@ BOOL CStcIspUserDlg::WriteComm(unsigned char function, unsigned int value, unsig
 	return done;
 }
 
-BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) const
+BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG max_delay_ms) const
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 
@@ -718,7 +719,9 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) c
 	sum = 0;
 	stage = 0;
 	buffer_pos = 0;
-	ULONGLONG tick = GetTickCount64();
+
+	ULONGLONG start = GetTickCount64();
+
 	while (TRUE)
 	{
 		ClearCommError(this->CommHandle, &Errors, &Stat);
@@ -789,7 +792,10 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG ticks) c
 		}
 		if (!this->IsWorking)
 			break;
-		if (GetTickCount64() - tick >= ticks)
+
+		ULONGLONG tick = GetTickCount64();
+
+		if (tick - start >= max_delay_ms)
 			break;
 		if (sign != 0)
 			return rbc == 0;

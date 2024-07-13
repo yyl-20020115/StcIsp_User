@@ -65,7 +65,7 @@ protected:
 	
 	BOOL WriteComm(unsigned char function, unsigned int value, unsigned char length, unsigned char buffer[PAGE_SIZE]);
 
-	BOOL ReadComm(unsigned char buffer[PAGE_SIZE], ULONGLONG ticks) const;
+	BOOL ReadComm(unsigned char buffer[PAGE_SIZE], ULONGLONG max_delay_ms) const;
 
 	unsigned char Sum(unsigned char* buffer, int length);
 
