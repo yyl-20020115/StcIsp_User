@@ -30,6 +30,37 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+static void DelayUs(int uDelay)
+{
+	LARGE_INTEGER litmp;
+	LONGLONG QPart1, QPart2;
+
+	double dfMinus, dfFreq, dfTim;
+
+	/*
+		Pointer to a variable that the function sets, in counts per second, to the current performance-counter frequency.
+		If the installed hardware does not support a high-resolution performance counter,
+		the value passed back through this pointer can be zero.
+	*/
+	QueryPerformanceFrequency(&litmp);
+
+	dfFreq = (double)litmp.QuadPart;
+
+	/*
+		Pointer to a variable that the function sets, in counts, to the current performance-counter value.
+	*/
+	QueryPerformanceCounter(&litmp);
+
+	QPart1 = litmp.QuadPart;
+	do
+	{
+		QueryPerformanceCounter(&litmp);
+		QPart2 = litmp.QuadPart;
+		dfMinus = (double)(QPart2 - QPart1);
+		dfTim = dfMinus / dfFreq;
+	} while (dfTim < 0.000001 * uDelay);
+}
 static CString GetExtension(const CString& Path) {
 	int p = Path.ReverseFind(_T('.'));
 	return p >= 0 ? Path.Mid(p) : _T("");
@@ -131,7 +162,10 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 	else
 	{
 		_this->AppendStatusText(_T("连接目标芯片 ..."));
-		if (!_this->SendCommand(DFU_CMD_CONNECT, 0, 0, 0) || !_this->GetResponse(buffer, 100))
+		if (_this->UseLeadings)
+			_this->SendLeandings(_this->LeadingSymbol, _this->LeadingSize);
+		if (!_this->SendCommand(DFU_CMD_CONNECT)
+			|| !_this->GetResponse(buffer, 100, &payload_length))
 		{
 			_this->AppendStatusText(_T("连接失败 !"));
 		}
@@ -148,7 +182,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 				memcpy(ptr, buffer, page_size);
 				memset(buffer, 0xff, PAGE_SIZE);
 				//read PAGE_SIZE bytes from address
-				if (!_this->SendCommand(DFU_CMD_READ, address, PAGE_SIZE, 0)
+				if (!_this->SendCommand(DFU_CMD_READ, address, PAGE_SIZE)
 					|| !_this->GetResponse(buffer, 100, &payload_length))
 				{
 					_this->AppendStatusText(_T("上传失败 !"));
@@ -177,6 +211,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 	::InterlockedExchangePointer((void**)&_this->UploadWorkerThread, nullptr);
 	if (WaitResult == WAIT_OBJECT_0) {
 		_this->AppendStatusText(_T("代码上传被终止 !"));
+		_this->DoCloseHandle();
 	}
 	_this->OpenButton.EnableWindow(TRUE);
 	_this->StopButton.EnableWindow(FALSE);
@@ -218,7 +253,10 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	else
 	{
 		_this->AppendStatusText(_T("连接目标芯片 ..."));
-		if (!_this->SendCommand(DFU_CMD_CONNECT, 0, 0, 0) || !_this->GetResponse(buffer, 100))
+		if (_this->UseLeadings)
+			_this->SendLeandings(_this->LeadingSymbol, _this->LeadingSize);
+		if (!_this->SendCommand(DFU_CMD_CONNECT) 
+			|| !_this->GetResponse(buffer, 100))
 		{
 			_this->AppendStatusText(_T("连接失败 !"));
 		}
@@ -226,7 +264,8 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 		{
 			_this->AppendStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
 			_this->AppendStatusText(_T("正在擦除芯片 ... "));
-			if (!_this->SendCommand(DFU_CMD_ERASE, 0, 0, 0) || !_this->GetResponse(buffer, 5000))
+			if (!_this->SendCommand(DFU_CMD_ERASE) 
+				|| !_this->GetResponse(buffer, 5000))
 			{
 				_this->AppendStatusText(_T("擦除失败 !"));
 			}
@@ -274,6 +313,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	::InterlockedExchangePointer((void**)&_this->DownloadWorkerThread, nullptr);
 	if (WaitResult == WAIT_OBJECT_0) {
 		_this->AppendStatusText(_T("代码下载被终止 !"));
+		_this->DoCloseHandle();
 	}
 	_this->OpenButton.EnableWindow(TRUE);
 	_this->StopButton.EnableWindow(FALSE);
@@ -517,17 +557,19 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	, LastMD5()
 	, CommHandle(INVALID_HANDLE_VALUE)
 	, IsWorking(FALSE)
+	, UseLeadings(DEFAULT_LEADING_ENABLE)
+	, LeadingSymbol(DEFAULT_LEADING_SYMBOL)
+	, LeadingSize(DEFAULT_LEADING_SIZE)
 	, FileChanged(FALSE)
 	, CodeBuffer(nullptr)
 	, CodeLength(0)
 	, QuitEvent(INVALID_HANDLE_VALUE)
-	, DoneEvent(INVALID_HANDLE_VALUE)
 	, DownloadWorkerThread(nullptr)
 	, UploadWorkerThread(nullptr)
+	, _CodeType(CodeType::None)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	this->QuitEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-	this->DoneEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
 CStcIspUserDlg::~CStcIspUserDlg()
@@ -540,10 +582,6 @@ CStcIspUserDlg::~CStcIspUserDlg()
 	if (this->QuitEvent != INVALID_HANDLE_VALUE) {
 		CloseHandle(this->QuitEvent);
 		this->QuitEvent = INVALID_HANDLE_VALUE;
-	}
-	if (this->DoneEvent != INVALID_HANDLE_VALUE) {
-		CloseHandle(this->DoneEvent);
-		this->DoneEvent = INVALID_HANDLE_VALUE;
 	}
 }
 
@@ -783,7 +821,29 @@ BOOL CStcIspUserDlg::OpenComPort(int port)
 	return this->CommHandle != INVALID_HANDLE_VALUE;
 }
 
-BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsigned char size, unsigned char output[PAGE_SIZE])
+BOOL CStcIspUserDlg::SendLeandings(unsigned char symbol, unsigned int size,  int delay_us)
+{
+	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
+	BOOL done = FALSE;
+	unsigned char* buffer = new unsigned char[size];
+	if (buffer != nullptr) {
+		memset(buffer, symbol, size);
+		DWORD NumberOfBytesWritten = 0;
+		done = WriteFile(
+			this->CommHandle,
+			buffer,
+			size,
+			&NumberOfBytesWritten, 0);
+		delete[] buffer;
+
+		if (done) {
+			DelayUs(delay_us);
+		}
+	}
+	return done;
+}
+
+BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsigned char size, unsigned char* output)
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 	BOOL done = FALSE;
@@ -795,8 +855,8 @@ BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsign
 		frame_buffer[0] = CMD_HEAD_SIGN;
 		frame_buffer[1] = size + 6;
 		frame_buffer[2] = cmd;
-		frame_buffer[3] = HIBYTE((address >> 16)&0xffff); //ignored by receiver
-		frame_buffer[4] = LOBYTE((address >> 16)&0xffff); //ignored by receiver
+		frame_buffer[3] = HIBYTE((address >> 16) & 0xffff); //ignored by receiver
+		frame_buffer[4] = LOBYTE((address >> 16) & 0xffff); //ignored by receiver
 		frame_buffer[5] = HIBYTE((address & 0xffff));
 		frame_buffer[6] = LOBYTE((address & 0xffff));
 		frame_buffer[7] = size;
@@ -818,7 +878,7 @@ BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsign
 	return done;
 }
 
-BOOL CStcIspUserDlg::GetResponse(unsigned char input[PAGE_SIZE], ULONGLONG max_delay_ms, unsigned char* payload_length_ptr) const
+BOOL CStcIspUserDlg::GetResponse(unsigned char* input, ULONGLONG max_delay_ms, unsigned char* payload_length_ptr) const
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 

@@ -1,10 +1,20 @@
 ﻿#pragma once
 #include "CColorEdit.h"
 
-#define PAGE_SIZE 128
+#define PAGE_SIZE	0x80
 #define MEMORY_SIZE 0x10000
 
-// CStcIspUserDlg 对话框
+#define DEFAULT_LEADING_ENABLE TRUE
+#define DEFAULT_LEADING_SYMBOL 0x7f
+#define DEFAULT_LEADING_SIZE 0x40
+#define DEFAULT_LEADING_DELAY 50000
+
+enum class CodeType : int
+{
+	None = -1,
+	DownloadingCode = 0,
+	UploadedCode = 1,
+};
 class CStcIspUserDlg : public CDialogEx
 {
 public:
@@ -50,18 +60,22 @@ protected:
 	HANDLE CommHandle;
 	BOOL IsWorking;
 	BOOL FileChanged;
+	BOOL UseLeadings;
+	unsigned char LeadingSymbol;
+	unsigned int LeadingSize;
 	unsigned char* CodeBuffer;
+	CodeType _CodeType;
 	unsigned long long CodeLength;
 	HANDLE QuitEvent;
-	HANDLE DoneEvent;
 	CWinThread* DownloadWorkerThread;
 	CWinThread* UploadWorkerThread;
 protected:
 	BOOL CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage = TRUE);
 	BOOL DoCloseHandle();
 	BOOL OpenComPort(int port);	
-	BOOL SendCommand(unsigned char function, unsigned int address, unsigned char size, unsigned char buffer[PAGE_SIZE]);
-	BOOL GetResponse(unsigned char buffer[PAGE_SIZE], ULONGLONG max_delay_ms, unsigned char* payload_length_ptr = nullptr) const;
+	BOOL SendLeandings(unsigned char symbol, unsigned int size, int delay_us = DEFAULT_LEADING_DELAY);
+	BOOL SendCommand(unsigned char function, unsigned int address = 0, unsigned char size = 0, unsigned char* buffer = nullptr);
+	BOOL GetResponse(unsigned char* buffer, ULONGLONG max_delay_ms = 0, unsigned char* payload_length_ptr = nullptr) const;
 	unsigned char Sum(unsigned char* buffer, int length);
 	void AppendStatusText(const TCHAR* format = nullptr, ...);
 	BOOL CheckAndUpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length);
