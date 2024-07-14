@@ -6,14 +6,15 @@
 
 #define DEFAULT_LEADING_ENABLE TRUE
 #define DEFAULT_LEADING_SYMBOL 0x7f
-#define DEFAULT_LEADING_SIZE 0x40
+//USE DOUBLE LENGTH OF THE MCU
+#define DEFAULT_LEADING_SIZE 0x80
 #define DEFAULT_LEADING_DELAY 50000
 
-enum class CodeType : int
+enum class DataSource : int
 {
 	None = -1,
-	DownloadingCode = 0,
-	UploadedCode = 1,
+	MCU = 0,
+	FILE = 1,
 };
 class CStcIspUserDlg : public CDialogEx
 {
@@ -64,7 +65,7 @@ protected:
 	unsigned char LeadingSymbol;
 	unsigned int LeadingSize;
 	unsigned char* CodeBuffer;
-	CodeType _CodeType;
+	DataSource Source;
 	unsigned long long CodeLength;
 	HANDLE QuitEvent;
 	CWinThread* DownloadWorkerThread;
@@ -79,7 +80,7 @@ protected:
 	unsigned char Sum(unsigned char* buffer, int length);
 	void AppendStatusText(const TCHAR* format = nullptr, ...);
 	BOOL CheckAndUpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length);
-	void UpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length);
+	void UpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length,DataSource Source = DataSource::FILE);
 public:
 	afx_msg void OnClose();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);

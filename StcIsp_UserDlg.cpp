@@ -204,7 +204,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 				}
 			}
 
-			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE);
+			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE,DataSource::MCU);
 		}
 	}
 
@@ -215,7 +215,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 	}
 	_this->OpenButton.EnableWindow(TRUE);
 	_this->StopButton.EnableWindow(FALSE);
-	_this->DownloadButton.EnableWindow(_this->CodeBuffer != nullptr);
+	//_this->DownloadButton.EnableWindow(FALSE);
 	_this->UploadButton.EnableWindow(TRUE);
 	_this->SaveButton.EnableWindow(_this->CodeBuffer != nullptr);
 	_this->ComboPorts.EnableWindow(TRUE);
@@ -226,7 +226,10 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	if (param == nullptr) return 0;
 	CStcIspUserDlg* _this = reinterpret_cast<CStcIspUserDlg*>(param);
-	if (_this->CodeLength == 0 || _this->CodeBuffer == nullptr) return 0;
+	if (_this->CodeLength == 0 
+		|| _this->CodeBuffer == nullptr
+		|| _this->Source == DataSource::MCU) return 0;
+
 	int index = _this->ComboPorts.GetCurSel();
 	if (index < 0) return 0;
 	_this->IsWorking = TRUE;
@@ -486,7 +489,7 @@ BOOL CStcIspUserDlg::CheckAndUpdateCodeDisplay(unsigned char* code_buffer, unsig
 	return FALSE;
 }
 
-void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length)
+void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length, DataSource Source)
 {
 	if (code_buffer != nullptr && code_length > 0)
 	{
@@ -517,6 +520,8 @@ void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int 
 		}
 		this->CodeBuffer = code_buffer;
 		this->CodeLength = code_length;
+		this->Source = Source;
+		this->DownloadButton.EnableWindow(Source != DataSource::MCU);
 	}
 }
 
@@ -566,7 +571,7 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	, QuitEvent(INVALID_HANDLE_VALUE)
 	, DownloadWorkerThread(nullptr)
 	, UploadWorkerThread(nullptr)
-	, _CodeType(CodeType::None)
+	, Source(DataSource::None)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	this->QuitEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
