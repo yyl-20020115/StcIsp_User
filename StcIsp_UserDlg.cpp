@@ -678,10 +678,13 @@ BOOL CStcIspUserDlg::OnInitDialog()
 
 	this->DownloadCodePath = theApp.GetProfileString(_T("Config"), _T("DownloadPath"), _T(""));
 	this->UploadCodePath = theApp.GetProfileString(_T("Config"), _T("UploadPath"), _T(""));
-
+	this->AutoTraceCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoTrace"), 0));
+	this->AutoDownloadCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoDownload"), 0));
+	
 	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
+	
 	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
@@ -1061,18 +1064,21 @@ void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 
 void CStcIspUserDlg::OnBnClickedCheckAutotrace()
 {
-	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
+	int checked = this->AutoTraceCheckBox.GetCheck();
+	if (checked == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
 	else {
 		this->KillTimer(REFRESH_AUTOTRACE_TIMER_ID);
 	}
+	theApp.WriteProfileInt(_T("Config"), _T("AutoTrace"), checked);
 }
 
 
 void CStcIspUserDlg::OnBnClickedCheckAutodownload()
 {
-	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
+	int checked = this->AutoDownloadCheckBox.GetCheck();
+	if (checked == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 		this->AutoTraceCheckBox.SetCheck(BST_CHECKED);
 		this->OnBnClickedCheckAutotrace();
@@ -1080,6 +1086,7 @@ void CStcIspUserDlg::OnBnClickedCheckAutodownload()
 	else {
 		this->KillTimer(REFRESH_AUTODOWNLOAD_TIMER_ID);
 	}
+	theApp.WriteProfileInt(_T("Config"), _T("AutoDownload"), checked);
 }
 
 void CStcIspUserDlg::OnCbnSelchangeComboComports()
