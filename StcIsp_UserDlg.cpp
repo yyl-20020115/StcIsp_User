@@ -186,7 +186,6 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 					|| !_this->GetResponse(buffer, 100, &payload_length))
 				{
 					_this->AppendStatusText(_T("上传失败 !"));
-					_this->DoCloseHandle();
 					break;
 				}
 				if (payload_length != PAGE_SIZE) {
@@ -198,7 +197,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 
 				if (address >= MEMORY_SIZE)
 				{
-					_this->DoCloseHandle();
+					_this->SendCommand(DFU_CMD_REBOOT);
 					_this->AppendStatusText(_T("代码上传成功 !"));
 					break;
 				}
@@ -206,12 +205,12 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 
 			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE,DataSource::MCU);
 		}
+		_this->DoCloseHandle();
 	}
 
 	::InterlockedExchangePointer((void**)&_this->UploadWorkerThread, nullptr);
 	if (WaitResult == WAIT_OBJECT_0) {
 		_this->AppendStatusText(_T("代码上传被终止 !"));
-		_this->DoCloseHandle();
 	}
 	_this->OpenButton.EnableWindow(TRUE);
 	_this->StopButton.EnableWindow(FALSE);
@@ -294,7 +293,6 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 							|| !_this->GetResponse(buffer, 100))
 						{
 							_this->AppendStatusText(_T("下载失败 !"));
-							_this->DoCloseHandle();
 							break;
 						}
 						address += page_size;
@@ -303,20 +301,19 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 					}
 					if (address >= _this->CodeLength)
 					{
-						_this->SendCommand(DFU_CMD_REBOOT, 0, 0, 0);
-						_this->DoCloseHandle();
+						_this->SendCommand(DFU_CMD_REBOOT);
 						_this->AppendStatusText(_T("代码下载成功 !"));
 						break;
 					}
 				}
 			}
 		}
+		_this->DoCloseHandle();
 	}
 
 	::InterlockedExchangePointer((void**)&_this->DownloadWorkerThread, nullptr);
 	if (WaitResult == WAIT_OBJECT_0) {
 		_this->AppendStatusText(_T("代码下载被终止 !"));
-		_this->DoCloseHandle();
 	}
 	_this->OpenButton.EnableWindow(TRUE);
 	_this->StopButton.EnableWindow(FALSE);
