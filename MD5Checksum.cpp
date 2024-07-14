@@ -160,7 +160,7 @@ CString CMD5Checksum::GetMD5(CFile& File, BOOL OnceForAll)
             if (length > 0) {
                 BYTE* Buffer = new BYTE[length];
                 if (Buffer != nullptr) {
-                    UINT nLength = File.Read(Buffer, length);
+                    UINT nLength = File.Read(Buffer, (UINT)length);
                     MD5Checksum.Update(Buffer, nLength);
                     delete[] Buffer;
                 }

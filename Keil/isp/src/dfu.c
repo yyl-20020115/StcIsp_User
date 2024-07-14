@@ -45,16 +45,12 @@ void dfu_events()
         ret = 2;
         break;
     case DFU_CMD_READ:
-//#ifdef DEBUG
         ret = size;
-        ptr = &UartRxBuffer[0];
+        ptr = &UartTxBuffer[0];
         while (size--)
         {
             *ptr++ = iap_read_byte(addr++);
         }
-//#else
-//        status = STATUS_ERRORCMD;
-//#endif
         break;
     case DFU_CMD_PROGRAM:
         while (size--)

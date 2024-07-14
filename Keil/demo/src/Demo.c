@@ -22,12 +22,17 @@ void tm0_isr() interrupt 1
 
 void main()
 {
-//	P32 = 0;
-	P32 = 1;
+	
     sys_init();
+
+	P0 = 0x55;
+	P2 = 0xAA;
     
     while (1)
     {
+			P0=~P0;
+			P2=~P2;
+			
         if (P32 == 0)
         {
             DfuFlag = DFU_TAG;          //当需要执行用户ISP代码时,将强制执行标志赋值到DFU标志变量中

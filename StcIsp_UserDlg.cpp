@@ -7,8 +7,9 @@
 #include <vector>
 #include <chrono>
 #include <algorithm>
-#define HEAD_SIGN 0x23
-#define TAIL_SIGN 0x24
+#define CMD_HEAD_SIGN '#'
+#define REPLY_HEAD_SIGN '@'
+#define TAIL_SIGN '$'
 #define BLOCK_SIZE 4096
 
 #define DFU_CMD_CONNECT         0xa0
@@ -45,14 +46,14 @@ static CString GetFileMD5(const CString& fileName)
 
 	CFile file(fileName, CFile::typeBinary | CFile::modeRead | CFile::shareDenyNone);
 
-	MD5Return = CMD5Checksum::GetMD5(file,TRUE);
+	MD5Return = CMD5Checksum::GetMD5(file, TRUE);
 
 	file.Close();
 
 	return MD5Return;
 
 }
-static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL<<20)
+static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL << 20)
 {
 	//Make sure we clear out any elements which may already be in the array
 	ports.clear();
@@ -100,6 +101,93 @@ static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL<<20)
 	std::sort(ports.begin(), ports.end());
 }
 
+UINT CStcIspUserDlg::DoUpload(LPVOID param) {
+	if (param == nullptr) return 0;
+	CStcIspUserDlg* _this = reinterpret_cast<CStcIspUserDlg*>(param);
+	int index = _this->ComboPorts.GetCurSel();
+	if (index < 0) return 0;
+	_this->IsWorking = TRUE;
+	int page_size = 0;
+	unsigned int address = 0;
+	unsigned char payload_length = 0;
+	unsigned char* ptr = nullptr;
+	unsigned char buffer[PAGE_SIZE] = { 0 };
+	DWORD WaitResult = 0;
+	_this->AppendStatusText();
+	_this->ComboPorts.EnableWindow(FALSE);
+	_this->OpenButton.EnableWindow(FALSE);
+	_this->DownloadButton.EnableWindow(FALSE);
+	_this->UploadButton.EnableWindow(FALSE);
+	_this->StopButton.EnableWindow(TRUE);
+
+	_this->ProgressDownload.SetRange32(0, MEMORY_SIZE);
+	_this->ProgressDownload.SetPos(0);
+
+	int com_number = (int)_this->ComboPorts.GetItemData(index);
+	if (!_this->OpenComPort(com_number))
+	{
+		AfxMessageBox(_T("端口打开失败 !"), 0, 0);
+	}
+	else
+	{
+		_this->AppendStatusText(_T("连接目标芯片 ..."));
+		if (!_this->SendCommand(DFU_CMD_CONNECT, 0, 0, 0) || !_this->GetResponse(buffer, 100))
+		{
+			_this->AppendStatusText(_T("连接失败 !"));
+		}
+		else
+		{
+			unsigned char* code_buffer = new unsigned char[MEMORY_SIZE];
+			memset(code_buffer, 0xff, MEMORY_SIZE);
+			_this->AppendStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
+			_this->AppendStatusText(_T("正在上传代码 ... "));
+			while ((WaitResult = WaitForSingleObject(_this->QuitEvent, 0)) != WAIT_OBJECT_0)
+			{
+				ptr = code_buffer + address;
+				page_size = PAGE_SIZE;
+				memcpy(ptr, buffer, page_size);
+				memset(buffer, 0xff, PAGE_SIZE);
+				//read PAGE_SIZE bytes from address
+				if (!_this->SendCommand(DFU_CMD_READ, address, PAGE_SIZE, 0)
+					|| !_this->GetResponse(buffer, 100, &payload_length))
+				{
+					_this->AppendStatusText(_T("上传失败 !"));
+					_this->DoCloseHandle();
+					break;
+				}
+				if (payload_length != PAGE_SIZE) {
+					payload_length = payload_length;
+				}
+				memcpy(ptr, buffer, payload_length);
+				address += payload_length;
+				_this->ProgressDownload.SetPos(address);
+
+				if (address >= MEMORY_SIZE)
+				{
+					_this->DoCloseHandle();
+					_this->AppendStatusText(_T("代码上传成功 !"));
+					break;
+				}
+			}
+
+			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE);
+		}
+	}
+
+	::InterlockedExchangePointer((void**)&_this->UploadWorkerThread, nullptr);
+	if (WaitResult == WAIT_OBJECT_0) {
+		_this->AppendStatusText(_T("代码上传被终止 !"));
+	}
+	_this->OpenButton.EnableWindow(TRUE);
+	_this->StopButton.EnableWindow(FALSE);
+	_this->DownloadButton.EnableWindow(_this->CodeBuffer != nullptr);
+	_this->UploadButton.EnableWindow(TRUE);
+	_this->SaveButton.EnableWindow(_this->CodeBuffer != nullptr);
+	_this->ComboPorts.EnableWindow(TRUE);
+
+	_this->IsWorking = FALSE;
+	return 0;
+}
 UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	if (param == nullptr) return 0;
 	CStcIspUserDlg* _this = reinterpret_cast<CStcIspUserDlg*>(param);
@@ -107,43 +195,45 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	int index = _this->ComboPorts.GetCurSel();
 	if (index < 0) return 0;
 	_this->IsWorking = TRUE;
-	int page_size = 0;
+	unsigned char page_size = 0;
 	unsigned int address = 0;
 	unsigned char* ptr = nullptr;
 	unsigned char buffer[PAGE_SIZE] = { 0 };
 	DWORD WaitResult = 0;
-	_this->SetStatusText();
+	_this->AppendStatusText();
+	_this->ComboPorts.EnableWindow(FALSE);
 	_this->OpenButton.EnableWindow(FALSE);
 	_this->DownloadButton.EnableWindow(FALSE);
+	_this->UploadButton.EnableWindow(FALSE);
 	_this->StopButton.EnableWindow(TRUE);
 
 	_this->ProgressDownload.SetRange32(0, (int)_this->CodeLength);
 	_this->ProgressDownload.SetPos(0);
 
 	int com_number = (int)_this->ComboPorts.GetItemData(index);
-	if (!_this->OpenComm(com_number))
+	if (!_this->OpenComPort(com_number))
 	{
 		AfxMessageBox(_T("端口打开失败 !"), 0, 0);
 	}
 	else
 	{
-		_this->SetStatusText(_T("连接目标芯片 ..."));
-		if (!_this->WriteComm(DFU_CMD_CONNECT, 0, 0, 0) || !_this->ReadComm(buffer, 100))
+		_this->AppendStatusText(_T("连接目标芯片 ..."));
+		if (!_this->SendCommand(DFU_CMD_CONNECT, 0, 0, 0) || !_this->GetResponse(buffer, 100))
 		{
-			_this->SetStatusText(_T("连接失败 !"));
+			_this->AppendStatusText(_T("连接失败 !"));
 		}
 		else
 		{
-			_this->SetStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
-			_this->SetStatusText(_T("正在擦除芯片 ... "));
-			if (!_this->WriteComm(DFU_CMD_ERASE, 0, 0, 0) || !_this->ReadComm(buffer, 5000))
+			_this->AppendStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
+			_this->AppendStatusText(_T("正在擦除芯片 ... "));
+			if (!_this->SendCommand(DFU_CMD_ERASE, 0, 0, 0) || !_this->GetResponse(buffer, 5000))
 			{
-				_this->SetStatusText(_T("擦除失败 !"));
+				_this->AppendStatusText(_T("擦除失败 !"));
 			}
 			else
 			{
-				_this->SetStatusText(_T("正在下载代码 ... "));
-				while ((WaitResult=WaitForSingleObject(_this->QuitEvent,0))!=WAIT_OBJECT_0)
+				_this->AppendStatusText(_T("正在下载代码 ... "));
+				while ((WaitResult = WaitForSingleObject(_this->QuitEvent, 0)) != WAIT_OBJECT_0)
 				{
 					ptr = _this->CodeBuffer + address;
 					if (*ptr == 0xff) //skip 0xff bytes
@@ -153,15 +243,15 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 					else
 					{
 						page_size = PAGE_SIZE;
-						if (address < 0x10000 && address + PAGE_SIZE > 0x10000)
+						if (address < MEMORY_SIZE && address + PAGE_SIZE > MEMORY_SIZE)
 						{
-							page_size = 0x10000 - address;
+							page_size = MEMORY_SIZE - address;
 						}
 						memcpy(buffer, ptr, page_size);
-						if (!_this->WriteComm(DFU_CMD_PROGRAM, address, page_size, buffer)
-							|| !_this->ReadComm(buffer, 100))
+						if (!_this->SendCommand(DFU_CMD_PROGRAM, address, page_size, buffer)
+							|| !_this->GetResponse(buffer, 100))
 						{
-							_this->SetStatusText(_T("下载失败 !"));
+							_this->AppendStatusText(_T("下载失败 !"));
 							_this->DoCloseHandle();
 							break;
 						}
@@ -171,9 +261,9 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 					}
 					if (address >= _this->CodeLength)
 					{
-						_this->WriteComm(DFU_CMD_REBOOT, 0, 0, 0);
+						_this->SendCommand(DFU_CMD_REBOOT, 0, 0, 0);
 						_this->DoCloseHandle();
-						_this->SetStatusText(_T("代码下载成功 !"));
+						_this->AppendStatusText(_T("代码下载成功 !"));
 						break;
 					}
 				}
@@ -181,14 +271,16 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 		}
 	}
 
-	::InterlockedExchangePointer((void**)&_this->WorkingThread, nullptr);
+	::InterlockedExchangePointer((void**)&_this->DownloadWorkerThread, nullptr);
 	if (WaitResult == WAIT_OBJECT_0) {
-		_this->SetStatusText(_T("代码下载被终止 !"));
+		_this->AppendStatusText(_T("代码下载被终止 !"));
 	}
 	_this->OpenButton.EnableWindow(TRUE);
 	_this->StopButton.EnableWindow(FALSE);
 	_this->DownloadButton.EnableWindow(_this->CodeBuffer != nullptr);
-
+	_this->SaveButton.EnableWindow(_this->CodeBuffer != nullptr);
+	_this->UploadButton.EnableWindow(_this->CodeBuffer != nullptr);
+	_this->ComboPorts.EnableWindow(TRUE);
 	_this->IsWorking = FALSE;
 	return 0;
 }
@@ -204,10 +296,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 	char* token; // esi
 	char ch; // dl
 	unsigned int length;
-	int index;
-	unsigned short binary_length;
 	unsigned int address;
-	unsigned int binary_input_length = 0;
+	unsigned int code_length = 0;
 	unsigned char* code_buffer;
 	unsigned char type;
 	unsigned char check_sum;
@@ -215,7 +305,7 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 	CFile file;
 	if (!file.Open(path, CFile::shareDenyNone | CFile::typeBinary, 0))
 	{
-		if(ShowMessage)
+		if (ShowMessage)
 			AfxMessageBox(_T("打开文件失败 !"), 0, 0);
 		return FALSE;
 	}
@@ -224,8 +314,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 	file.Read(input_text_buffer, (UINT)input_text_length);
 	input_text_buffer[input_text_length] = 0;
 
-	code_buffer = new unsigned char[0x10000];
-	memset(code_buffer, 0xff, 0x10000);
+	code_buffer = new unsigned char[MEMORY_SIZE];
+	memset(code_buffer, 0xff, MEMORY_SIZE);
 
 	if (IsHex) {
 		token = strtok(input_text_buffer, "\r\n");
@@ -257,7 +347,7 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 					local[3] = *(++token);
 					address = strtoul(local, 0, 16);
 					real_sum += (char)((address >> 8) & 0xff);
-					real_sum += (char)(address& 0xff);
+					real_sum += (char)(address & 0xff);
 					memset(local, 0, sizeof(local));
 					local[0] = *(++token);
 					local[1] = *(++token);
@@ -275,8 +365,8 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 							*((unsigned char*)code_buffer + (address++)) = value;
 							real_sum += value;
 						}
-						if (address > binary_input_length) {
-							binary_input_length = address;
+						if (address > code_length) {
+							code_length = address;
 						}
 
 						memset(local, 0, sizeof(local));
@@ -301,17 +391,30 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 		}
 	}
 	else {
-		binary_input_length = input_text_length > 0x10000 ? 0x10000 : input_text_length;
-		memcpy(code_buffer, input_text_buffer, binary_input_length);
+		code_length = input_text_length > MEMORY_SIZE ? MEMORY_SIZE : input_text_length;
+		memcpy(code_buffer, input_text_buffer, code_length);
 	}
 	delete[] input_text_buffer;
+	if (this->CheckAndUpdateCodeDisplay(code_buffer, code_length)) {
+		this->DownloadCodePath = path;
+		this->AppendStatusText(path);
+		return TRUE;
+	}
+	delete[] code_buffer;
+	if (ShowMessage)
+		AfxMessageBox(_T("代码文件不规范, 无法加载 !"), 0, 0);
+	return FALSE;
+}
+
+BOOL CStcIspUserDlg::CheckAndUpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length)
+{
 	//here is for binary
 	if (code_buffer != nullptr && code_buffer[0] == 0x02)
 	{
-		binary_length = (((unsigned short)code_buffer[1]) << 8) | (code_buffer[2]);
-		if (binary_length >= (BLOCK_SIZE + 3))
+		unsigned int code_length_at_header = (((unsigned short)code_buffer[1]) << 8) | (code_buffer[2]);
+		if (code_length_at_header >= (BLOCK_SIZE + 3))
 		{
-			index = 3;
+			int index = 3;
 			int cs = 0;
 			int fills = 0;
 			while (code_buffer[index++] == 0xff) cs++;
@@ -320,7 +423,7 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 				index = 3;
 				while (code_buffer[index++] == 0) cs++;
 			}
-			if (cs>= BLOCK_SIZE && index >= BLOCK_SIZE + 3)
+			if (cs >= BLOCK_SIZE && index >= BLOCK_SIZE + 3)
 			{
 				//relocate first 3 bytes
 				code_buffer[BLOCK_SIZE + 0] = code_buffer[0];
@@ -333,47 +436,48 @@ BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 				code_buffer[0] = 0xff;
 				code_buffer[1] = 0xff;
 				code_buffer[2] = 0xff;
-				CString display_text_buffer;
-				if (binary_input_length > 0)
-				{
-					address = 0;
-					do
-					{
-						if (0 == (address % 16)) {
-							CString addressHex;
-							addressHex.Format(_T("%04X "), address);
-							display_text_buffer += addressHex;
-						}
-						{
-							CString dataHex;
-							dataHex.Format(_T("%02X "), (unsigned char)code_buffer[address]);
-							display_text_buffer += dataHex;
-						}
-						if (address % 16 == 15) {
-							display_text_buffer += _T("\r\n");
-						}
-						++address;
-					} while (address < binary_input_length);
-				}
-				this->HexEdit.SetWindowText(display_text_buffer);
+				this->UpdateCodeDisplay(code_buffer, code_length);
 
-				if (this->CodeBuffer != nullptr)
-				{
-					delete[] this->CodeBuffer;
-					this->CodeBuffer = 0;
-				}
-				this->CodeLength = binary_input_length;
-				this->CodeBuffer = code_buffer;
-				this->CodePath = path;
-				this->SetStatusText(path);
 				return TRUE;
 			}
 		}
 	}
-	delete[] code_buffer;
-	if (ShowMessage)
-		AfxMessageBox(_T("代码文件不规范, 无法加载 !"), 0, 0);
+
 	return FALSE;
+}
+
+void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length)
+{
+	if (code_buffer != nullptr && code_length > 0)
+	{
+		CString display_text_buffer;
+		unsigned int address = 0;
+		do
+		{
+			if (0 == (address % 16)) {
+				CString addressHex;
+				addressHex.Format(_T("%04X "), address);
+				display_text_buffer += addressHex;
+			}
+			{
+				CString dataHex;
+				dataHex.Format(_T("%02X "), (unsigned char)code_buffer[address]);
+				display_text_buffer += dataHex;
+			}
+			if (address % 16 == 15) {
+				display_text_buffer += _T("\r\n");
+			}
+			++address;
+		} while (address < code_length);
+		this->HexEdit.SetWindowText(display_text_buffer);
+		if (this->CodeBuffer != nullptr)
+		{
+			delete[] this->CodeBuffer;
+			this->CodeBuffer = 0;
+		}
+		this->CodeBuffer = code_buffer;
+		this->CodeLength = code_length;
+	}
 }
 
 class CAboutDlg : public CDialogEx
@@ -406,12 +510,10 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
 END_MESSAGE_MAP()
 
-
-// CStcIspUserDlg 对话框
-
 CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_STCISP_USER_DIALOG, pParent)
-	, CodePath()
+	, DownloadCodePath()
+	, UploadCodePath()
 	, LastMD5()
 	, CommHandle(INVALID_HANDLE_VALUE)
 	, IsWorking(FALSE)
@@ -420,7 +522,8 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	, CodeLength(0)
 	, QuitEvent(INVALID_HANDLE_VALUE)
 	, DoneEvent(INVALID_HANDLE_VALUE)
-	, WorkingThread(nullptr)
+	, DownloadWorkerThread(nullptr)
+	, UploadWorkerThread(nullptr)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	this->QuitEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -438,13 +541,16 @@ CStcIspUserDlg::~CStcIspUserDlg()
 		CloseHandle(this->QuitEvent);
 		this->QuitEvent = INVALID_HANDLE_VALUE;
 	}
+	if (this->DoneEvent != INVALID_HANDLE_VALUE) {
+		CloseHandle(this->DoneEvent);
+		this->DoneEvent = INVALID_HANDLE_VALUE;
+	}
 }
 
 void CStcIspUserDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_COMBO_COMPORTS, ComboPorts);
-	DDX_Control(pDX, IDC_STATIC_STATUS, StatusText);
 	DDX_Control(pDX, IDC_PROGRESS_DOWNLOAD, ProgressDownload);
 	DDX_Control(pDX, IDC_BUTTON_STOP, StopButton);
 	DDX_Control(pDX, IDC_BUTTON_DOWNLOAD, DownloadButton);
@@ -452,13 +558,16 @@ void CStcIspUserDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT_HEX, HexEdit);
 	DDX_Control(pDX, IDC_CHECK_AUTOTRACE, AutoTraceCheckBox);
 	DDX_Control(pDX, IDC_CHECK_AUTODOWNLOAD, AutoDownloadCheckBox);
+	DDX_Control(pDX, IDC_EDIT_STATUS, StatusEdit);
+	DDX_Control(pDX, IDC_BUTTON_SAVE_FILE, SaveButton);
+	DDX_Control(pDX, IDC_BUTTON_UPLOAD, UploadButton);
 }
 
 BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	
+
 	ON_BN_CLICKED(IDCANCEL, &CStcIspUserDlg::OnBnClickedCancel)
 	ON_BN_CLICKED(IDC_BUTTON_OPEN_FILE, &CStcIspUserDlg::OnBnClickedButtonOpenFile)
 	ON_BN_CLICKED(IDC_BUTTON_DOWNLOAD, &CStcIspUserDlg::OnBnClickedButtonDownload)
@@ -469,6 +578,8 @@ BEGIN_MESSAGE_MAP(CStcIspUserDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_CHECK_AUTOTRACE, &CStcIspUserDlg::OnBnClickedCheckAutotrace)
 	ON_BN_CLICKED(IDC_CHECK_AUTODOWNLOAD, &CStcIspUserDlg::OnBnClickedCheckAutodownload)
 	ON_CBN_SELCHANGE(IDC_COMBO_COMPORTS, &CStcIspUserDlg::OnCbnSelchangeComboComports)
+	ON_BN_CLICKED(IDC_BUTTON_UPLOAD, &CStcIspUserDlg::OnBnClickedButtonUpload)
+	ON_BN_CLICKED(IDC_BUTTON_SAVE_FILE, &CStcIspUserDlg::OnBnClickedButtonSaveFile)
 END_MESSAGE_MAP()
 
 BOOL CStcIspUserDlg::OnInitDialog()
@@ -495,8 +606,11 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);
 	SetIcon(m_hIcon, FALSE);
 	this->OpenButton.EnableWindow(TRUE);
+	this->UploadButton.EnableWindow(TRUE);
 	this->DownloadButton.EnableWindow(FALSE);
 	this->StopButton.EnableWindow(FALSE);
+	this->SaveButton.EnableWindow(FALSE);
+
 	this->HexEdit.SetBackColor(RGB(0xff, 0xff, 0xff));
 	std::vector<int> ports;
 	GetSerialPorts(ports);
@@ -512,17 +626,18 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	if (this->ComboPorts.GetCount() > 0) {
 		int index = 0;
 		CString text = theApp.GetProfileString(_T("Config"), _T("COMPort"), _T(""));
-		if(!text.IsEmpty())
+		if (!text.IsEmpty())
 		{
 			index = this->ComboPorts.FindStringExact(-1, text);
 		}
-		this->ComboPorts.SetCurSel(index>=0?index:0);
+		this->ComboPorts.SetCurSel(index >= 0 ? index : 0);
 	}
-	this->SetStatusText(
-		this->CodePath = theApp.GetProfileStringW(_T("Config"), _T("Path"), _T(""))
-	);
+
+	this->DownloadCodePath = theApp.GetProfileString(_T("Config"), _T("DownloadPath"), _T(""));
+	this->UploadCodePath = theApp.GetProfileString(_T("Config"), _T("UploadPath"), _T(""));
+
 	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
-		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL,NULL);
+		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
 	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
@@ -580,28 +695,37 @@ void CStcIspUserDlg::OnBnClickedCancel()
 
 void CStcIspUserDlg::OnBnClickedButtonOpenFile()
 {
-	CFileDialog dialog(TRUE, _T("hex"), 
-		this->CodePath.IsEmpty()?NULL:this->CodePath,
+	CFileDialog dialog(TRUE, _T("hex"),
+		this->DownloadCodePath.IsEmpty() ? NULL : this->DownloadCodePath,
 		OFN_FILEMUSTEXIST,
 		_T("代码文件 (*.bin; *.hex)|*.bin; *.hex|所有文件 (*.*)|*.*||"));
 	if (dialog.DoModal()) {
 		CString path = dialog.GetPathName();
 		if (CheckAndLoadCodeFile(path)) {
 			this->DownloadButton.EnableWindow(TRUE);
-			theApp.WriteProfileString(_T("Config"), _T("Path"), this->CodePath);
+			this->SaveButton.EnableWindow(TRUE);
+			theApp.WriteProfileString(_T("Config"), _T("DownloadPath"), this->DownloadCodePath);
 		}
 	}
 }
 
 void CStcIspUserDlg::OnBnClickedButtonDownload()
 {
-	if (this->WorkingThread == nullptr) {
-		this->WorkingThread = AfxBeginThread(DoDownload, this);
-		if (this->WorkingThread != nullptr) {
-			this->DoneEvent = this->WorkingThread->m_hThread;
-		}
+	if (this->DownloadWorkerThread == nullptr) {
+		this->UploadButton.EnableWindow(FALSE);
+		::InterlockedExchangePointer(
+			(void**)&this->DownloadWorkerThread, AfxBeginThread(DoDownload, this));
 	}
 }
+void CStcIspUserDlg::OnBnClickedButtonUpload()
+{
+	if (this->UploadWorkerThread == nullptr) {
+		this->DownloadButton.EnableWindow(FALSE);
+		::InterlockedExchangePointer(
+			(void**)&this->UploadWorkerThread, AfxBeginThread(DoUpload, this));
+	}
+}
+
 
 void CStcIspUserDlg::OnClose()
 {
@@ -613,7 +737,8 @@ void CStcIspUserDlg::OnBnClickedButtonStop()
 {
 	this->StopButton.EnableWindow(FALSE);
 
-	if (this->WorkingThread != nullptr) {
+	if (this->DownloadWorkerThread != nullptr
+		|| this->UploadWorkerThread != nullptr) {
 		SetEvent(this->QuitEvent);
 	}
 }
@@ -629,10 +754,9 @@ BOOL CStcIspUserDlg::DoCloseHandle()
 	return ret;
 }
 
-BOOL CStcIspUserDlg::OpenComm(int port)
+BOOL CStcIspUserDlg::OpenComPort(int port)
 {
 	DoCloseHandle();
-
 	COMMTIMEOUTS CommTimeouts = { 0 };
 	DCB DCB = { 0 };
 	CString fn;
@@ -659,36 +783,34 @@ BOOL CStcIspUserDlg::OpenComm(int port)
 	return this->CommHandle != INVALID_HANDLE_VALUE;
 }
 
-BOOL CStcIspUserDlg::WriteComm(unsigned char function, unsigned int value, unsigned char length, unsigned char output[PAGE_SIZE])
+BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsigned char size, unsigned char output[PAGE_SIZE])
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 	BOOL done = FALSE;
-	unsigned short high = (unsigned short)(value >> 16);
-	unsigned short _low = (unsigned short)(value & 0xffff);
 	unsigned char sum = 0;
 	DWORD NumberOfBytesWritten = 0;
-	unsigned char* frame_buffer = new unsigned char[length + 10];
+	unsigned char* frame_buffer = new unsigned char[size + 10];
 	if (frame_buffer != nullptr) {
-		memset(frame_buffer, 0, length + 10);
-		frame_buffer[0] = HEAD_SIGN;
-		frame_buffer[1] = length + 6;
-		frame_buffer[2] = function;
-		frame_buffer[3] = HIBYTE(high);
-		frame_buffer[4] = LOBYTE(high);
-		frame_buffer[5] = HIBYTE(_low);
-		frame_buffer[6] = LOBYTE(_low);
-		frame_buffer[7] = length;
-		if (length != 0 && output != 0)
+		memset(frame_buffer, 0, size + 10);
+		frame_buffer[0] = CMD_HEAD_SIGN;
+		frame_buffer[1] = size + 6;
+		frame_buffer[2] = cmd;
+		frame_buffer[3] = HIBYTE((address >> 16)&0xffff); //ignored by receiver
+		frame_buffer[4] = LOBYTE((address >> 16)&0xffff); //ignored by receiver
+		frame_buffer[5] = HIBYTE((address & 0xffff));
+		frame_buffer[6] = LOBYTE((address & 0xffff));
+		frame_buffer[7] = size;
+		if (size != 0 && output != 0)
 		{
-			memcpy(&frame_buffer[8], output, length);
+			memcpy(frame_buffer + 8, output, size);
 		}
-		frame_buffer[length + 8] = TAIL_SIGN;
-		sum = Sum(frame_buffer, length + 9);
-		frame_buffer[length + 9] = -sum;
+		frame_buffer[size + 8] = TAIL_SIGN;
+		sum = Sum(frame_buffer, size + 9);
+		frame_buffer[size + 9] = -sum;
 		done = WriteFile(
 			this->CommHandle,
 			frame_buffer,
-			length + 10,
+			size + 10,
 			&NumberOfBytesWritten, 0);
 
 		delete[] frame_buffer;
@@ -696,7 +818,7 @@ BOOL CStcIspUserDlg::WriteComm(unsigned char function, unsigned int value, unsig
 	return done;
 }
 
-BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG max_delay_ms) const
+BOOL CStcIspUserDlg::GetResponse(unsigned char input[PAGE_SIZE], ULONGLONG max_delay_ms, unsigned char* payload_length_ptr) const
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 
@@ -704,18 +826,18 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG max_dela
 	int buffer_pos;
 	int payload_pos;
 	int payload_count;
-	int sign;
+	int completed;
 	unsigned char sum;
-	unsigned char bc;
+	unsigned char current;
 	unsigned char payload_length;
-	unsigned char rbc;
+	unsigned char status;
 	DWORD NumberOfBytesRead;
 	DWORD Errors;
 	COMSTAT Stat = { 0 };
 	char frame_buffer[256] = { 0 };
 
 	payload_pos = 0;
-	sign = 0;
+	completed = 0;
 	sum = 0;
 	stage = 0;
 	buffer_pos = 0;
@@ -729,7 +851,6 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG max_dela
 		if (to_read_bytes > sizeof(input)) {
 			to_read_bytes = sizeof(input);
 		}
-		Stat.cbInQue -= to_read_bytes;
 		if (to_read_bytes > 0)
 		{
 			if (!ReadFile(this->CommHandle,
@@ -740,56 +861,61 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG max_dela
 		}
 		if (payload_pos < buffer_pos)
 		{
-			bc = frame_buffer[payload_pos];
-			sum += bc;
+			current = frame_buffer[payload_pos];
+			sum += current;
 			++payload_pos;
 			switch (stage)
 			{
 			case 0:
 			{
-				sum = bc;
-				stage = bc == '@';
+				sum = current;
+				stage = (current == REPLY_HEAD_SIGN);
 				break;
 			}
 			case 1:
-				rbc = bc;
+				status = current;
 				stage = 2;
 				break;
 			case 2:
-				payload_length = bc;
+				payload_length = current;
+				if (payload_length_ptr != nullptr) {
+					*payload_length_ptr = payload_length;
+				}
 				payload_count = 0;
 				stage = 3;
-				if (bc == 0) stage = 4;
+				if (current == 0) stage = 4;
 				break;
 			case 3:
-				if (input != nullptr)
-					input[payload_count] = bc;
+				if (input != nullptr) {
+					input[payload_count] = current;
+				}
 				if (++payload_count >= payload_length)
 					stage = 4;
 				break;
 			case 4:
-				if (bc != TAIL_SIGN)
+				if (current != TAIL_SIGN)
 				{
-					sum = bc;
-					stage = bc == '@';
+					sum = current;
+					stage = (current == REPLY_HEAD_SIGN);
 				}
 				stage = 5;
 				break;
 			case 5:
 				if (sum != 0)
 				{
-					sum = bc;
-					stage = bc == '@';
+					sum = current;
+					stage = (current == REPLY_HEAD_SIGN);
 				}
-				else
+				else //complted
 				{
-					sign = 1;
+					completed = TRUE;
 				}
 				break;
 			default:
 				break;
 			}
 		}
+
 		if (!this->IsWorking)
 			break;
 
@@ -797,10 +923,10 @@ BOOL CStcIspUserDlg::ReadComm(unsigned char input[PAGE_SIZE], ULONGLONG max_dela
 
 		if (tick - start >= max_delay_ms)
 			break;
-		if (sign != 0)
-			return rbc == 0;
+		if (completed)
+			return status == STATUS_OK;
 	}
-	return sign != 0 && rbc == 0;
+	return completed && status == STATUS_OK;
 }
 unsigned char CStcIspUserDlg::Sum(unsigned char* buffer, int length)
 {
@@ -810,7 +936,7 @@ unsigned char CStcIspUserDlg::Sum(unsigned char* buffer, int length)
 	return result;
 }
 
-void CStcIspUserDlg::SetStatusText(const TCHAR* format, ...)
+void CStcIspUserDlg::AppendStatusText(const TCHAR* format, ...)
 {
 	if (format != nullptr)
 	{
@@ -818,11 +944,18 @@ void CStcIspUserDlg::SetStatusText(const TCHAR* format, ...)
 		va_start(Args, format);
 		CString Text;
 		Text.FormatV(format, Args);
-		this->StatusText.SetWindowText(Text);
+
+		CString Lines;
+		this->StatusEdit.GetWindowText(Lines);
+		if (!Lines.IsEmpty()) {
+			Lines += _T("\r\n");
+		}
+		Lines += Text;
+		this->StatusEdit.SetWindowText(Lines);
 	}
 	else
 	{
-		this->StatusText.SetWindowText(_T(""));
+		this->StatusEdit.SetWindowText(_T(""));
 	}
 }
 
@@ -830,12 +963,12 @@ void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	switch (nIDEvent) {
 	case REFRESH_AUTOTRACE_TIMER_ID:
-		if (!this->IsWorking && 
+		if (!this->IsWorking &&
 			(this->AutoTraceCheckBox.GetCheck() == BST_CHECKED)) {
-			CString MD5 = GetFileMD5(this->CodePath);
+			CString MD5 = GetFileMD5(this->DownloadCodePath);
 			if (MD5 != this->LastMD5) {
 				this->FileChanged = CheckAndLoadCodeFile(
-					this->CodePath, 
+					this->DownloadCodePath,
 					FALSE);
 				if (this->FileChanged) {
 					this->LastMD5 = MD5;
@@ -893,5 +1026,28 @@ void CStcIspUserDlg::OnCbnSelchangeComboComports()
 	}
 	if (theApp.WriteProfileString(_T("Config"), _T("COMPort"), text)) {
 		text.Empty();
+	}
+}
+
+void CStcIspUserDlg::OnBnClickedButtonSaveFile()
+{
+	if (this->CodeBuffer == nullptr || this->CodeLength == 0) {
+		AfxMessageBox(_T("尚无可用保存的数据 !"));
+	}
+	else {
+		CFileDialog dialog(FALSE, _T("bin"),
+			this->UploadCodePath.IsEmpty() ? NULL : this->UploadCodePath,
+			OFN_OVERWRITEPROMPT,
+			_T("代码文件 (*.bin)|*.bin|所有文件 (*.*)|*.*||"));
+		if (dialog.DoModal()) {
+			this->UploadCodePath = dialog.GetPathName();
+			CFile file;
+			if (file.Open(this->UploadCodePath, CFile::typeBinary | CFile::modeWrite | CFile::shareDenyWrite))
+			{
+				file.Write(this->CodeBuffer, (UINT)this->CodeLength);
+				file.Close();
+				theApp.WriteProfileString(_T("Config"), _T("UploadPath"), this->UploadCodePath);
+			}
+		}
 	}
 }
