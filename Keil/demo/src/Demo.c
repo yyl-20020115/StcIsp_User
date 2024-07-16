@@ -12,6 +12,7 @@ long xdata DfuFlag _at_ 0x0efc;				 //DFU标志, 定义在xdata的最后4字节
 #define DEFAULT_LEADING_SYMBOL 0x7f
 #define DEFAULT_LEADING_SIZE   0x40
 
+#define IAP_RESET_CMD 0x20
 
 void Delay100us()       //@24.000MHz
 {
@@ -59,8 +60,8 @@ void main()
 				if (symbols_count>=DEFAULT_LEADING_SIZE)
 				{
   					symbols_count = 0;
-						DfuFlag = DFU_TAG;					//当需要执行用户ISP代码时,将强制执行标志赋值到DFU标志变量中
-						IAP_CONTR = 0x20;					 //然后执行软复位
+						DfuFlag = DFU_TAG;
+						IAP_CONTR = IAP_RESET_CMD;
 				}
 		}
 }
@@ -74,7 +75,7 @@ void sys_init()
 		P3M0 = 0x00;
 		P3M1 = 0x00;
 		
-		DfuFlag = 0;												//上电正常执行用户AP,时需要将DFU标志清零
+		DfuFlag = 0;
 
     AUXR &= ~0x01;
     SCON = 0x52;
