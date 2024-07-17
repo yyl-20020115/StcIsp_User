@@ -654,7 +654,7 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	this->HexEdit.SetBackColor(RGB(0xff, 0xff, 0xff));
 	std::vector<int> ports;
 	GetSerialPorts(ports);
-	for (int i = 0; i < ports.size(); i++) {
+	for (size_t i = 0; i < ports.size(); i++) {
 		CString com_name;
 		int com_number = ports[i];
 		com_name.Format(_T("COM%d"), com_number);

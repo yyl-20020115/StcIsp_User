@@ -156,11 +156,11 @@ CString CMD5Checksum::GetMD5(CFile& File, BOOL OnceForAll)
         CMD5Checksum MD5Checksum;  //checksum object 
 
         if (OnceForAll) {
-            size_t length = File.GetLength();
+            UINT length = (UINT)File.GetLength();
             if (length > 0) {
                 BYTE* Buffer = new BYTE[length];
                 if (Buffer != nullptr) {
-                    UINT nLength = File.Read(Buffer, (UINT)length);
+                    UINT nLength = File.Read(Buffer, length);
                     MD5Checksum.Update(Buffer, nLength);
                     delete[] Buffer;
                 }
