@@ -167,7 +167,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 	_this->ProgressDownload.SetPos(0);
 
 	int com_number = (int)_this->ComboPorts.GetItemData(index);
-	if (!_this->OpenComPort(com_number))
+	if (!_this->OpenCommPort(com_number))
 	{
 		AfxMessageBox(_T("端口打开失败 !"), 0, 0);
 	}
@@ -217,7 +217,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 
 			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE, DataSource::MCU);
 		}
-		_this->DoCloseHandle();
+		_this->CloseCommPort();
 	}
 
 	::InterlockedExchangePointer((void**)&_this->UploadWorkerThread, nullptr);
@@ -260,7 +260,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	_this->ProgressDownload.SetPos(0);
 
 	int com_number = (int)_this->ComboPorts.GetItemData(index);
-	if (!_this->OpenComPort(com_number))
+	if (!_this->OpenCommPort(com_number))
 	{
 		AfxMessageBox(_T("端口打开失败 !"), 0, 0);
 	}
@@ -320,7 +320,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 				}
 			}
 		}
-		_this->DoCloseHandle();
+		_this->CloseCommPort();
 	}
 
 	::InterlockedExchangePointer((void**)&_this->DownloadWorkerThread, nullptr);
@@ -837,7 +837,7 @@ void CStcIspUserDlg::OnBnClickedButtonStop()
 }
 
 
-BOOL CStcIspUserDlg::DoCloseHandle()
+BOOL CStcIspUserDlg::CloseCommPort()
 {
 	BOOL ret = FALSE;
 	if (this->CommHandle != INVALID_HANDLE_VALUE) {
@@ -847,9 +847,9 @@ BOOL CStcIspUserDlg::DoCloseHandle()
 	return ret;
 }
 
-BOOL CStcIspUserDlg::OpenComPort(int port)
+BOOL CStcIspUserDlg::OpenCommPort(int port)
 {
-	DoCloseHandle();
+	CloseCommPort();
 	COMMTIMEOUTS CommTimeouts = { 0 };
 	DCB DCB = { 0 };
 	CString fn;
@@ -920,7 +920,7 @@ BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsign
 			memcpy(frame_buffer + 8, output, size);
 		}
 		frame_buffer[size + 8] = TAIL_SIGN;
-		sum = Sum(frame_buffer, size + 9);
+		sum = CalculateSum(frame_buffer, size + 9);
 		frame_buffer[size + 9] = -sum;
 		done = WriteFile(
 			this->CommHandle,
@@ -1055,7 +1055,7 @@ BOOL CStcIspUserDlg::GetResponse(unsigned char* input, ULONGLONG max_delay_ms, u
 	}
 	return completed && status == STATUS_OK;
 }
-unsigned char CStcIspUserDlg::Sum(unsigned char* buffer, int length)
+unsigned char CStcIspUserDlg::CalculateSum(unsigned char* buffer, int length)
 {
 	unsigned char result = 0;
 	for (int i = 0; i < length; i++)
