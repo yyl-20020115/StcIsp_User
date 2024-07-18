@@ -907,7 +907,13 @@ BOOL CStcIspUserDlg::GetResponse(unsigned char* input, ULONGLONG max_delay_ms, u
 	stage = 0;
 	buffer_pos = 0;
 
-	ULONGLONG start = GetTickCount64();
+	ULONGLONG start =
+#ifdef _WIN64 
+		GetTickCount64()
+#else
+		GetTickCount()
+#endif
+		;
 
 	while (TRUE)
 	{
@@ -984,7 +990,13 @@ BOOL CStcIspUserDlg::GetResponse(unsigned char* input, ULONGLONG max_delay_ms, u
 		if (!this->IsWorking)
 			break;
 
-		ULONGLONG tick = GetTickCount64();
+		ULONGLONG tick =
+#ifdef _WIN64 
+			GetTickCount64()
+#else
+			GetTickCount()
+#endif
+			;
 
 		if (tick - start >= max_delay_ms)
 			break;
