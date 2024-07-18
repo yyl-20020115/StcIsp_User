@@ -3,8 +3,10 @@
 // 供 StcIspUser.rc 使用
 //
 #define IDM_ABOUTBOX                    0x0010
+#define IDM_TOPMOST						0x0020
 #define IDD_ABOUTBOX                    100
 #define IDS_ABOUTBOX                    101
+#define IDS_TOPMOST						103
 #define IDD_STCISP_USER_DIALOG          102
 #define IDR_MAINFRAME                   128
 #define IDC_EDIT_HEX                    1000

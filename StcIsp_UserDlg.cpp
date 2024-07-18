@@ -325,6 +325,16 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	return 0;
 }
 
+void CStcIspUserDlg::SetAlwaysOnTop(BOOL aot)
+{
+	if (aot) {
+		SetWindowPos(&CWnd::wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+	}
+	else {
+		SetWindowPos(&CWnd::wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+	}
+}
+
 BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
 {
 	if (path.IsEmpty()) return FALSE;
@@ -634,10 +644,15 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	{
 		BOOL bNameValid;
 		CString strAboutMenu;
-		bNameValid = strAboutMenu.LoadString(IDS_ABOUTBOX);
+		CString strTopMostMenu;
+
+		bNameValid = strAboutMenu.LoadString(IDS_ABOUTBOX)
+			&& strTopMostMenu.LoadString(IDS_TOPMOST);
 		ASSERT(bNameValid);
-		if (!strAboutMenu.IsEmpty())
+		if (!strAboutMenu.IsEmpty()&&!strTopMostMenu.IsEmpty())
 		{
+			pSysMenu->AppendMenu(MF_SEPARATOR);
+			pSysMenu->AppendMenu(MF_STRING, IDM_TOPMOST, strTopMostMenu);
 			pSysMenu->AppendMenu(MF_SEPARATOR);
 			pSysMenu->AppendMenu(MF_STRING, IDM_ABOUTBOX, strAboutMenu);
 		}
@@ -691,14 +706,36 @@ BOOL CStcIspUserDlg::OnInitDialog()
 
 void CStcIspUserDlg::OnSysCommand(UINT nID, LPARAM lParam)
 {
-	if ((nID & 0xFFF0) == IDM_ABOUTBOX)
+	nID &= 0xFFF0;
+	switch (nID) {
+	case IDM_ABOUTBOX:
+		{
+			CAboutDlg dlgAbout;
+			dlgAbout.DoModal();
+		}
+		break;
+	case IDM_TOPMOST:
 	{
-		CAboutDlg dlgAbout;
-		dlgAbout.DoModal();
+		CMenu* pSysMenu = GetSystemMenu(FALSE);
+		if (pSysMenu != nullptr)
+		{
+			UINT state = pSysMenu->GetMenuState(IDM_TOPMOST, 0);
+			if (state == MF_CHECKED) {
+				SetAlwaysOnTop(FALSE);
+				pSysMenu->CheckMenuItem(IDM_TOPMOST, MF_UNCHECKED);
+			}
+			else {
+				SetAlwaysOnTop(TRUE);
+				pSysMenu->CheckMenuItem(IDM_TOPMOST, MF_CHECKED);
+
+			}
+
+		}
 	}
-	else
-	{
+	break;
+	default:
 		CDialogEx::OnSysCommand(nID, lParam);
+		break;
 	}
 }
 

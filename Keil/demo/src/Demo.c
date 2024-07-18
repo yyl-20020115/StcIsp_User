@@ -42,7 +42,13 @@ void uart_int() interrupt 4
 		got = SBUF;
 		if(got == DEFAULT_LEADING_SYMBOL)
 		{
-			symbols_count++;
+			if (++symbols_count>=DEFAULT_LEADING_SIZE)
+			{
+					symbols_count = 0;
+					DfuFlag = DFU_TAG;
+					IAP_CONTR = IAP_RESET_CMD;
+			}
+
 		}else{
 			symbols_count = 0;
 		}
@@ -51,18 +57,11 @@ void uart_int() interrupt 4
 
 void main()
 {
-	
+		P0=0x55;
 		sys_init();
 	  while (1)
 		{
-				Delay100us();
-
-				if (symbols_count>=DEFAULT_LEADING_SIZE)
-				{
-  					symbols_count = 0;
-						DfuFlag = DFU_TAG;
-						IAP_CONTR = IAP_RESET_CMD;
-				}
+			P0=~P0;
 		}
 }
 
