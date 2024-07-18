@@ -61,6 +61,18 @@ static void DelayUs(int uDelay)
 		dfTim = dfMinus / dfFreq;
 	} while (dfTim < 0.000001 * uDelay);
 }
+static CString GetFileLastWriteTime(const CString& strFilePath)
+{
+	CFileStatus status;
+	if (!CFile::GetStatus(strFilePath, status))
+	{
+		return _T("");
+	}
+
+	CTime lastWriteTime = status.m_mtime;
+	CString strLastWriteTime = lastWriteTime.Format(_T("%Y-%m-%d %H:%M:%S"));
+	return strLastWriteTime;
+}
 static CString GetExtension(const CString& Path) {
 	int p = Path.ReverseFind(_T('.'));
 	return p >= 0 ? Path.Mid(p) : _T("");
@@ -203,7 +215,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 				}
 			}
 
-			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE,DataSource::MCU);
+			_this->UpdateCodeDisplay(code_buffer, MEMORY_SIZE, DataSource::MCU);
 		}
 		_this->DoCloseHandle();
 	}
@@ -225,7 +237,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	if (param == nullptr) return 0;
 	CStcIspUserDlg* _this = reinterpret_cast<CStcIspUserDlg*>(param);
-	if (_this->CodeLength == 0 
+	if (_this->CodeLength == 0
 		|| _this->CodeBuffer == nullptr
 		|| _this->Source == DataSource::MCU) return 0;
 
@@ -257,7 +269,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 		_this->AppendStatusText(_T("连接目标芯片 ..."));
 		if (_this->UseLeadings)
 			_this->SendLeandings(_this->LeadingSymbol, _this->LeadingSize);
-		if (!_this->SendCommand(DFU_CMD_CONNECT) 
+		if (!_this->SendCommand(DFU_CMD_CONNECT)
 			|| !_this->GetResponse(buffer, 100))
 		{
 			_this->AppendStatusText(_T("连接失败 !"));
@@ -266,7 +278,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 		{
 			_this->AppendStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
 			_this->AppendStatusText(_T("正在擦除芯片 ... "));
-			if (!_this->SendCommand(DFU_CMD_ERASE) 
+			if (!_this->SendCommand(DFU_CMD_ERASE)
 				|| !_this->GetResponse(buffer, 5000))
 			{
 				_this->AppendStatusText(_T("擦除失败 !"));
@@ -333,6 +345,7 @@ void CStcIspUserDlg::SetAlwaysOnTop(BOOL aot)
 	else {
 		SetWindowPos(&CWnd::wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 	}
+	theApp.WriteProfileInt(_T("Config"), _T("AlwaysOnTop"), aot);
 }
 
 BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
@@ -566,7 +579,7 @@ CStcIspUserDlg::CStcIspUserDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_STCISP_USER_DIALOG, pParent)
 	, DownloadCodePath()
 	, UploadCodePath()
-	, LastMD5()
+	, LastWriteTime()
 	, CommHandle(INVALID_HANDLE_VALUE)
 	, IsWorking(FALSE)
 	, UseLeadings(DEFAULT_LEADING_ENABLE)
@@ -649,7 +662,7 @@ BOOL CStcIspUserDlg::OnInitDialog()
 		bNameValid = strAboutMenu.LoadString(IDS_ABOUTBOX)
 			&& strTopMostMenu.LoadString(IDS_TOPMOST);
 		ASSERT(bNameValid);
-		if (!strAboutMenu.IsEmpty()&&!strTopMostMenu.IsEmpty())
+		if (!strAboutMenu.IsEmpty() && !strTopMostMenu.IsEmpty())
 		{
 			pSysMenu->AppendMenu(MF_SEPARATOR);
 			pSysMenu->AppendMenu(MF_STRING, IDM_TOPMOST, strTopMostMenu);
@@ -692,11 +705,15 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	this->UploadCodePath = theApp.GetProfileString(_T("Config"), _T("UploadPath"), _T(""));
 	this->AutoTraceCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoTrace"), 0));
 	this->AutoDownloadCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoDownload"), 0));
-	
+
+	BOOL aot = theApp.GetProfileInt(_T("Config"), _T("AlwaysOnTop"), FALSE);
+	this->SetAlwaysOnTop(aot);
+	pSysMenu->CheckMenuItem(IDM_TOPMOST, aot ? MF_CHECKED : MF_UNCHECKED);
+
 	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
-	
+
 	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
@@ -709,11 +726,11 @@ void CStcIspUserDlg::OnSysCommand(UINT nID, LPARAM lParam)
 	nID &= 0xFFF0;
 	switch (nID) {
 	case IDM_ABOUTBOX:
-		{
-			CAboutDlg dlgAbout;
-			dlgAbout.DoModal();
-		}
-		break;
+	{
+		CAboutDlg dlgAbout;
+		dlgAbout.DoModal();
+	}
+	break;
 	case IDM_TOPMOST:
 	{
 		CMenu* pSysMenu = GetSystemMenu(FALSE);
@@ -863,7 +880,7 @@ BOOL CStcIspUserDlg::OpenComPort(int port)
 	return this->CommHandle != INVALID_HANDLE_VALUE;
 }
 
-BOOL CStcIspUserDlg::SendLeandings(unsigned char symbol, unsigned int size,  int delay_us)
+BOOL CStcIspUserDlg::SendLeandings(unsigned char symbol, unsigned int size, int delay_us)
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 	BOOL done = FALSE;
@@ -1079,13 +1096,16 @@ void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 	case REFRESH_AUTOTRACE_TIMER_ID:
 		if (!this->IsWorking &&
 			(this->AutoTraceCheckBox.GetCheck() == BST_CHECKED)) {
-			CString MD5 = GetFileMD5(this->DownloadCodePath);
-			if (MD5 != this->LastMD5) {
+			CString LastWriteTime = GetFileLastWriteTime(this->DownloadCodePath);
+			if (this->LastWriteTime.IsEmpty()) {
+				this->LastWriteTime = LastWriteTime;
+			}
+			if (LastWriteTime != this->LastWriteTime) {
 				this->FileChanged = CheckAndLoadCodeFile(
 					this->DownloadCodePath,
 					FALSE);
 				if (this->FileChanged) {
-					this->LastMD5 = MD5;
+					this->LastWriteTime = LastWriteTime;
 					this->DownloadButton.EnableWindow(TRUE);
 				}
 			}

@@ -57,7 +57,7 @@ public:
 protected:
 	CString DownloadCodePath;
 	CString UploadCodePath;
-	CString LastMD5;
+	CString LastWriteTime;
 	HANDLE CommHandle;
 	BOOL IsWorking;
 	BOOL FileChanged;
