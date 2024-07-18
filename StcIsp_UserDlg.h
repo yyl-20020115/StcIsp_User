@@ -71,7 +71,7 @@ protected:
 	CWinThread* DownloadWorkerThread;
 	CWinThread* UploadWorkerThread;
 protected:
-	void SetAlwaysOnTop(BOOL aot);
+	BOOL SetAlwaysOnTop(BOOL aot);
 
 	BOOL CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage = TRUE);
 	BOOL DoCloseHandle();

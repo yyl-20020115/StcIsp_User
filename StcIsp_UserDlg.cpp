@@ -337,7 +337,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	return 0;
 }
 
-void CStcIspUserDlg::SetAlwaysOnTop(BOOL aot)
+BOOL CStcIspUserDlg::SetAlwaysOnTop(BOOL aot)
 {
 	if (aot) {
 		SetWindowPos(&CWnd::wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
@@ -346,6 +346,7 @@ void CStcIspUserDlg::SetAlwaysOnTop(BOOL aot)
 		SetWindowPos(&CWnd::wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 	}
 	theApp.WriteProfileInt(_T("Config"), _T("AlwaysOnTop"), aot);
+	return aot;
 }
 
 BOOL CStcIspUserDlg::CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage)
@@ -706,9 +707,9 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	this->AutoTraceCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoTrace"), 0));
 	this->AutoDownloadCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoDownload"), 0));
 
-	BOOL aot = theApp.GetProfileInt(_T("Config"), _T("AlwaysOnTop"), FALSE);
-	this->SetAlwaysOnTop(aot);
-	pSysMenu->CheckMenuItem(IDM_TOPMOST, aot ? MF_CHECKED : MF_UNCHECKED);
+	pSysMenu->CheckMenuItem(IDM_TOPMOST, this->SetAlwaysOnTop(
+		theApp.GetProfileInt(_T("Config"), _T("AlwaysOnTop"), FALSE))
+		? MF_CHECKED : MF_UNCHECKED);
 
 	if (this->AutoTraceCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTOTRACE_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
@@ -736,16 +737,11 @@ void CStcIspUserDlg::OnSysCommand(UINT nID, LPARAM lParam)
 		CMenu* pSysMenu = GetSystemMenu(FALSE);
 		if (pSysMenu != nullptr)
 		{
-			UINT state = pSysMenu->GetMenuState(IDM_TOPMOST, 0);
-			if (state == MF_CHECKED) {
-				SetAlwaysOnTop(FALSE);
-				pSysMenu->CheckMenuItem(IDM_TOPMOST, MF_UNCHECKED);
-			}
-			else {
-				SetAlwaysOnTop(TRUE);
-				pSysMenu->CheckMenuItem(IDM_TOPMOST, MF_CHECKED);
-
-			}
+			pSysMenu->CheckMenuItem(
+				IDM_TOPMOST,
+				SetAlwaysOnTop(
+					pSysMenu->GetMenuState(IDM_TOPMOST, 0) != MF_CHECKED
+				) ? MF_CHECKED : MF_UNCHECKED);
 
 		}
 	}
