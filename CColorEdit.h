@@ -1,4 +1,5 @@
 #pragma once
+
 class CColorEdit : public CEdit
 {
 	// Construction
