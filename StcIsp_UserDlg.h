@@ -1,14 +1,14 @@
 ﻿#pragma once
 #include "CColorEdit.h"
 
-#define PAGE_SIZE	0x80
-#define MEMORY_SIZE 0x10000
+constexpr int PAGE_SIZE = 0x80;
+constexpr int MEMORY_SIZE = 0x10000;
 
 #define DEFAULT_LEADING_ENABLE TRUE
-#define DEFAULT_LEADING_SYMBOL 0x7f
+constexpr unsigned char DEFAULT_LEADING_SYMBOL = 0x7f;
 //USE DOUBLE LENGTH OF THE MCU
-#define DEFAULT_LEADING_SIZE 0x80
-#define DEFAULT_LEADING_DELAY 50000
+constexpr unsigned char DEFAULT_LEADING_SIZE = 0x80;
+constexpr unsigned long DEFAULT_LEADING_DELAY = 50000;
 
 enum class DataSource : int
 {
