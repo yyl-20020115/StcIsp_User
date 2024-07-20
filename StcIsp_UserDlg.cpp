@@ -26,7 +26,9 @@
 
 #define REFRESH_AUTOTRACE_TIMER_ID			0x100
 #define REFRESH_AUTODOWNLOAD_TIMER_ID		0x200
-#define REFRESH_TIMER_INTERVAL	500
+#define REFRESH_COMPORTS_TIMER_ID			0x300
+#define REFRESH_TIMER_INTERVAL				500
+#define REFRESH_COMPORTS_INTERVAL			1000
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -111,7 +113,7 @@ static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL << 20)
 		{
 			int i = 0;
 
-			for (;;)
+			for (; szDevices != nullptr;)
 			{
 				//Get the current device name
 				TCHAR* pszCurrentDevice = &szDevices[i];
@@ -546,6 +548,49 @@ void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int 
 	}
 }
 
+void CStcIspUserDlg::UpdateCommPortsList()
+{
+	std::vector<int> listed_ports;
+	std::vector<int> found_ports;
+	GetSerialPorts(found_ports);
+	for (size_t i = 0; i < this->ComboPorts.GetCount(); i++) {
+		DWORD_PTR p = this->ComboPorts.GetItemData(i);
+		listed_ports.push_back(p);
+	}
+	std::sort(listed_ports.begin(), listed_ports.end());
+	bool eq = found_ports.size()>0 
+		&& listed_ports.size() 
+		== found_ports.size() 
+		&& std::equal(
+		std::begin(listed_ports),
+		std::end(listed_ports),
+		std::begin(found_ports));
+	if (!eq) {
+		this->ComboPorts.SetCurSel(-1);
+		this->ComboPorts.Clear();
+		for (size_t i = 0; i < found_ports.size(); i++) {
+			CString com_name;
+			int com_number = found_ports[i];
+			com_name.Format(_T("COM%d"), com_number);
+			int index = this->ComboPorts.AddString(com_name);
+			if (index >= 0) {
+				this->ComboPorts.SetItemData(index, com_number);
+			}
+		}
+	}
+
+	if (this->ComboPorts.GetCount() > 0
+		&&this->ComboPorts.GetCurSel()==-1) {
+		int index = 0;
+		CString text = theApp.GetProfileString(_T("Config"), _T("COMPort"), _T(""));
+		index = !text.IsEmpty() ?
+			this->ComboPorts.FindStringExact(-1, text) : 0;
+		this->ComboPorts.SetCurSel(index >= 0 ? index : 0);
+	}
+	//do not enable window if no port at all
+	this->ComboPorts.EnableWindow(this->ComboPorts.GetCount() > 0);
+}
+
 class CAboutDlg : public CDialogEx
 {
 public:
@@ -681,32 +726,12 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	this->SaveButton.EnableWindow(FALSE);
 
 	this->HexEdit.SetBackColor(RGB(0xff, 0xff, 0xff));
-	std::vector<int> ports;
-	GetSerialPorts(ports);
-	for (size_t i = 0; i < ports.size(); i++) {
-		CString com_name;
-		int com_number = ports[i];
-		com_name.Format(_T("COM%d"), com_number);
-		int index = this->ComboPorts.AddString(com_name);
-		if (index >= 0) {
-			this->ComboPorts.SetItemData(index, com_number);
-		}
-	}
-	if (this->ComboPorts.GetCount() > 0) {
-		int index = 0;
-		CString text = theApp.GetProfileString(_T("Config"), _T("COMPort"), _T(""));
-		if (!text.IsEmpty())
-		{
-			index = this->ComboPorts.FindStringExact(-1, text);
-		}
-		this->ComboPorts.SetCurSel(index >= 0 ? index : 0);
-	}
 
 	this->DownloadCodePath = theApp.GetProfileString(_T("Config"), _T("DownloadPath"), _T(""));
 	this->UploadCodePath = theApp.GetProfileString(_T("Config"), _T("UploadPath"), _T(""));
 	this->AutoTraceCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoTrace"), 0));
 	this->AutoDownloadCheckBox.SetCheck(theApp.GetProfileInt(_T("Config"), _T("AutoDownload"), 0));
-
+	this->UpdateCommPortsList();
 	pSysMenu->CheckMenuItem(IDM_TOPMOST, this->SetAlwaysOnTop(
 		theApp.GetProfileInt(_T("Config"), _T("AlwaysOnTop"), FALSE))
 		? MF_CHECKED : MF_UNCHECKED);
@@ -718,7 +743,7 @@ BOOL CStcIspUserDlg::OnInitDialog()
 	if (this->AutoDownloadCheckBox.GetCheck() == BST_CHECKED) {
 		this->SetTimer(REFRESH_AUTODOWNLOAD_TIMER_ID, REFRESH_TIMER_INTERVAL, NULL);
 	}
-
+	this->SetTimer(REFRESH_COMPORTS_TIMER_ID, REFRESH_COMPORTS_INTERVAL, NULL);
 	return TRUE;
 }
 
@@ -1034,8 +1059,8 @@ BOOL CStcIspUserDlg::GetResponse(unsigned char* input, ULONGLONG max_delay_ms, u
 				break;
 			default:
 				break;
+				}
 			}
-		}
 
 		if (!this->IsWorking)
 			break;
@@ -1052,9 +1077,9 @@ BOOL CStcIspUserDlg::GetResponse(unsigned char* input, ULONGLONG max_delay_ms, u
 			break;
 		if (completed)
 			return status == STATUS_OK;
-	}
+		}
 	return completed && status == STATUS_OK;
-}
+	}
 unsigned char CStcIspUserDlg::CalculateSum(unsigned char* buffer, int length)
 {
 	unsigned char result = 0;
@@ -1089,6 +1114,9 @@ void CStcIspUserDlg::AppendStatusText(const TCHAR* format, ...)
 void CStcIspUserDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	switch (nIDEvent) {
+	case REFRESH_COMPORTS_TIMER_ID:
+		this->UpdateCommPortsList();
+		break;
 	case REFRESH_AUTOTRACE_TIMER_ID:
 		if (!this->IsWorking &&
 			(this->AutoTraceCheckBox.GetCheck() == BST_CHECKED)) {

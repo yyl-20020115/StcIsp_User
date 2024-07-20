@@ -91,4 +91,7 @@ protected:
 	void AppendStatusText(const TCHAR* format = nullptr, ...);
 	BOOL CheckAndUpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length);
 	void UpdateCodeDisplay(unsigned char* code_buffer, unsigned int code_length,DataSource Source = DataSource::FILE);
+
+	void UpdateCommPortsList();
+
 };
