@@ -177,7 +177,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 	{
 		_this->AppendStatusText(_T("连接目标芯片 ..."));
 		if (_this->UseLeadings)
-			_this->SendLeandings(_this->LeadingSymbol, _this->LeadingSize);
+			_this->SendLeadings(_this->LeadingSymbol, _this->LeadingSize);
 		if (!_this->SendCommand(DFU_CMD_CONNECT)
 			|| !_this->GetResponse(buffer, 100, &payload_length))
 		{
@@ -270,7 +270,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 	{
 		_this->AppendStatusText(_T("连接目标芯片 ..."));
 		if (_this->UseLeadings)
-			_this->SendLeandings(_this->LeadingSymbol, _this->LeadingSize);
+			_this->SendLeadings(_this->LeadingSymbol, _this->LeadingSize);
 		if (!_this->SendCommand(DFU_CMD_CONNECT)
 			|| !_this->GetResponse(buffer, 100))
 		{
@@ -901,7 +901,7 @@ BOOL CStcIspUserDlg::OpenCommPort(int port)
 	return this->CommHandle != INVALID_HANDLE_VALUE;
 }
 
-BOOL CStcIspUserDlg::SendLeandings(unsigned char symbol, unsigned int size, int delay_us)
+BOOL CStcIspUserDlg::SendLeadings(unsigned char symbol, unsigned int size, int delay_us)
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 	BOOL done = FALSE;
