@@ -4,7 +4,7 @@
 	    ... 
 	#endif 
 	之间的代码需要被合并到目标程序中
-  主函数需要调用sys_init	
+  主函数需要调用iap_sys_init	
 */
 
 #define STCISP_USED_CODE
