@@ -719,6 +719,16 @@ BOOL CStcIspUserDlg::OnInitDialog()
 
 	SetIcon(m_hIcon, TRUE);
 	SetIcon(m_hIcon, FALSE);
+	CString caption;
+	this->GetWindowText(caption);
+	if (sizeof(intptr_t) == 4) {
+		caption += _T(" - 32 位版");
+	}
+	else if (sizeof(intptr_t) == 8) {
+		caption += _T(" - 64 位版");
+	}
+	this->SetWindowText(caption);
+
 	this->OpenButton.EnableWindow(TRUE);
 	this->UploadButton.EnableWindow(TRUE);
 	this->DownloadButton.EnableWindow(FALSE);
