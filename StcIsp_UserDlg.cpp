@@ -179,7 +179,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 		if (_this->UseLeadings)
 			_this->SendLeadings(_this->LeadingSymbol, _this->LeadingSize);
 		if (!_this->SendCommand(DFU_CMD_CONNECT)
-			|| !_this->GetResponse(buffer, 100, &payload_length))
+			|| !_this->GetResponse(buffer, 500, &payload_length))
 		{
 			_this->AppendStatusText(_T("连接失败 !"));
 		}
@@ -187,7 +187,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 		{
 			unsigned char* code_buffer = new unsigned char[MEMORY_SIZE];
 			memset(code_buffer, 0xff, MEMORY_SIZE);
-			_this->AppendStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
+			_this->AppendStatusText(_T("连接目标芯片成功! (固件版本: %d.%d)"), buffer[0], buffer[1]);
 			_this->AppendStatusText(_T("正在上传代码 ... "));
 			while ((WaitResult = WaitForSingleObject(_this->QuitEvent, 0)) != WAIT_OBJECT_0)
 			{
@@ -197,7 +197,7 @@ UINT CStcIspUserDlg::DoUpload(LPVOID param) {
 				memset(buffer, 0xff, PAGE_SIZE);
 				//read PAGE_SIZE bytes from address
 				if (!_this->SendCommand(DFU_CMD_READ, address, PAGE_SIZE)
-					|| !_this->GetResponse(buffer, 100, &payload_length))
+					|| !_this->GetResponse(buffer, 500, &payload_length))
 				{
 					_this->AppendStatusText(_T("上传失败 !"));
 					break;
@@ -272,16 +272,16 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 		if (_this->UseLeadings)
 			_this->SendLeadings(_this->LeadingSymbol, _this->LeadingSize);
 		if (!_this->SendCommand(DFU_CMD_CONNECT)
-			|| !_this->GetResponse(buffer, 100))
+			|| !_this->GetResponse(buffer, 500))
 		{
 			_this->AppendStatusText(_T("连接失败 !"));
 		}
 		else
 		{
-			_this->AppendStatusText(_T("连接目标芯垃成功 !(固件版本: %d.%d)"), buffer[0], buffer[1]);
+			_this->AppendStatusText(_T("连接目标芯片成功! (固件版本: %d.%d)"), buffer[0], buffer[1]);
 			_this->AppendStatusText(_T("正在擦除芯片 ... "));
 			if (!_this->SendCommand(DFU_CMD_ERASE)
-				|| !_this->GetResponse(buffer, 5000))
+				|| !_this->GetResponse(buffer, 50000))
 			{
 				_this->AppendStatusText(_T("擦除失败 !"));
 			}
@@ -304,7 +304,7 @@ UINT CStcIspUserDlg::DoDownload(LPVOID param) {
 						}
 						memcpy(buffer, ptr, page_size);
 						if (!_this->SendCommand(DFU_CMD_PROGRAM, address, page_size, buffer)
-							|| !_this->GetResponse(buffer, 100))
+							|| !_this->GetResponse(buffer, 500))
 						{
 							_this->AppendStatusText(_T("下载失败 !"));
 							break;
