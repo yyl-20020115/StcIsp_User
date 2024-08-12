@@ -82,13 +82,14 @@ void iap_uart_int() interrupt 4
 
 int main()
 {
-		P0=0x55;
+
 #ifdef  STCISP_USED_CODE
 		iap_sys_init();
 #endif
+		P0 = 0x55;
 	  while (1)
 		{
-			P0=~P0;
+			P0 = ~P0;
 		}
 }
 
