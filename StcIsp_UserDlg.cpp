@@ -98,7 +98,7 @@ static CString GetFileMD5(const CString& fileName)
 	return MD5Return;
 
 }
-static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL << 20)
+static void GetSerialPorts(std::vector<DWORD_PTR>& ports, DWORD maxlen = 1ULL << 20)
 {
 	//Make sure we clear out any elements which may already be in the array
 	ports.clear();
@@ -124,7 +124,7 @@ static void GetSerialPorts(std::vector<int>& ports, DWORD maxlen = 1ULL << 20)
 				if (nLen > 3 && _tcsnicmp(pszCurrentDevice, _T("COM"), 3) == 0)
 				{
 					//Work out the port number
-					int nPort = _ttoi(&pszCurrentDevice[3]);
+					DWORD_PTR nPort = _ttoi(&pszCurrentDevice[3]);
 					ports.push_back(nPort);
 				}
 
@@ -550,10 +550,10 @@ void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int 
 
 void CStcIspUserDlg::UpdateCommPortsList()
 {
-	std::vector<int> listed_ports;
-	std::vector<int> found_ports;
+	std::vector<DWORD_PTR> listed_ports;
+	std::vector<DWORD_PTR> found_ports;
 	GetSerialPorts(found_ports);
-	for (size_t i = 0; i < this->ComboPorts.GetCount(); i++) {
+	for (int i = 0; i < this->ComboPorts.GetCount(); i++) {
 		DWORD_PTR p = this->ComboPorts.GetItemData(i);
 		listed_ports.push_back(p);
 	}
@@ -570,8 +570,8 @@ void CStcIspUserDlg::UpdateCommPortsList()
 		this->ComboPorts.Clear();
 		for (size_t i = 0; i < found_ports.size(); i++) {
 			CString com_name;
-			int com_number = found_ports[i];
-			com_name.Format(_T("COM%d"), com_number);
+			DWORD_PTR com_number = found_ports[i];
+			com_name.Format(_T("COM%d"), (int)com_number);
 			int index = this->ComboPorts.AddString(com_name);
 			if (index >= 0) {
 				this->ComboPorts.SetItemData(index, com_number);
