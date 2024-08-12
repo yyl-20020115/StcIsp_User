@@ -7,28 +7,28 @@
 #include <vector>
 #include <chrono>
 #include <algorithm>
-#define CMD_HEAD_SIGN '#'
-#define REPLY_HEAD_SIGN '@'
-#define TAIL_SIGN '$'
-#define BLOCK_SIZE 4096
+constexpr char CMD_HEAD_SIGN = '#';
+constexpr char REPLY_HEAD_SIGN = '@';
+constexpr char TAIL_SIGN = '$';
+constexpr int BLOCK_SIZE = 4096;
 
-#define DFU_CMD_CONNECT         0xa0
-#define DFU_CMD_READ            0xa1
-#define DFU_CMD_PROGRAM         0xa2
-#define DFU_CMD_ERASE           0xa3
-#define DFU_CMD_REBOOT          0xa4
+constexpr unsigned char DFU_CMD_CONNECT = 0xa0;
+constexpr unsigned char DFU_CMD_READ = 0xa1;
+constexpr unsigned char DFU_CMD_PROGRAM = 0xa2;
+constexpr unsigned char DFU_CMD_ERASE = 0xa3;
+constexpr unsigned char DFU_CMD_REBOOT = 0xa4;
 
-#define STATUS_OK               0x00
-#define STATUS_ERRORCMD         0x01
-#define STATUS_OUTOFRANGE       0x02
-#define STATUS_PROGRAMERR       0x03
-#define STATUS_ERRORWRAP        0xff
+constexpr unsigned char STATUS_OK = 0x00;
+constexpr unsigned char STATUS_ERRORCMD = 0x01;
+constexpr unsigned char STATUS_OUTOFRANGE = 0x02;
+constexpr unsigned char STATUS_PROGRAMERR = 0x03;
+constexpr unsigned char STATUS_ERRORWRAP = 0xff;
 
-#define REFRESH_AUTOTRACE_TIMER_ID			0x100
-#define REFRESH_AUTODOWNLOAD_TIMER_ID		0x200
-#define REFRESH_COMPORTS_TIMER_ID			0x300
-#define REFRESH_TIMER_INTERVAL				500
-#define REFRESH_COMPORTS_INTERVAL			1000
+constexpr UINT_PTR REFRESH_AUTOTRACE_TIMER_ID = 0x100;
+constexpr UINT_PTR REFRESH_AUTODOWNLOAD_TIMER_ID = 0x200;
+constexpr UINT_PTR REFRESH_COMPORTS_TIMER_ID = 0x300;
+constexpr UINT_PTR REFRESH_TIMER_INTERVAL = 500;
+constexpr UINT_PTR REFRESH_COMPORTS_INTERVAL = 1000;
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
