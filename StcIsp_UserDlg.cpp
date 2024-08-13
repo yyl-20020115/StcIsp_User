@@ -549,6 +549,7 @@ void CStcIspUserDlg::UpdateCodeDisplay(unsigned char* code_buffer, unsigned int 
 
 void CStcIspUserDlg::UpdateCommPortsList()
 {
+	if (this->IsWorking) return;
 	std::vector<DWORD_PTR> listed_ports;
 	std::vector<DWORD_PTR> found_ports;
 	GetSerialPorts(found_ports);
