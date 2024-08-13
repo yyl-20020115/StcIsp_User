@@ -85,7 +85,7 @@ protected:
 	BOOL CheckAndLoadCodeFile(const CString& path, BOOL ShowMessage = TRUE);
 	BOOL OpenCommPort(int port);	
 	BOOL CloseCommPort();
-	BOOL SendLeadings(unsigned char symbol, unsigned int size, int delay_us = DEFAULT_LEADING_DELAY);
+	BOOL SendLeadings(unsigned char symbol, unsigned int size, int delay_us = DEFAULT_LEADING_DELAY) const;
 	BOOL SendCommand(unsigned char function, unsigned int address = 0, unsigned char size = 0, unsigned char* buffer = nullptr);
 	BOOL GetResponse(unsigned char* buffer, ULONGLONG max_delay_ms = DEFAULT_OPERATING_DELAY, unsigned char* payload_length_ptr = nullptr) const;
 	unsigned char CalculateSum(unsigned char* buffer, int length);

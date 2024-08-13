@@ -9,7 +9,7 @@
 #include <algorithm>
 constexpr char CMD_HEAD_SIGN = '#';
 constexpr char REPLY_HEAD_SIGN = '@';
-constexpr char TAIL_SIGN = '$';
+constexpr char TAIL_SIGN = '$'; 
 constexpr int BLOCK_SIZE = 4096;
 
 constexpr unsigned char DFU_CMD_CONNECT = 0xa0;
@@ -812,7 +812,7 @@ void CStcIspUserDlg::OnPaint()
 	}
 }
 
-HCURSOR CStcIspUserDlg::OnQueryDragIcon()
+HCURSOR CStcIspUserDlg::OnQueryDragIcon() 
 {
 	return static_cast<HCURSOR>(m_hIcon);
 }
@@ -914,7 +914,7 @@ BOOL CStcIspUserDlg::OpenCommPort(int port)
 	return this->CommHandle != INVALID_HANDLE_VALUE;
 }
 
-BOOL CStcIspUserDlg::SendLeadings(unsigned char symbol, unsigned int size, int delay_us)
+BOOL CStcIspUserDlg::SendLeadings(unsigned char symbol, unsigned int size, int delay_us) const
 {
 	if (this->CommHandle == INVALID_HANDLE_VALUE) return FALSE;
 	BOOL done = FALSE;
@@ -944,7 +944,9 @@ BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsign
 	DWORD NumberOfBytesWritten = 0;
 	unsigned char* frame_buffer = new unsigned char[size + 10];
 	if (frame_buffer != nullptr) {
-		memset(frame_buffer, 0, ((unsigned int)size) + 10);
+		size_t _size = size;
+		_size += 10;
+		memset(frame_buffer, 0, _size);
 		frame_buffer[0] = CMD_HEAD_SIGN;
 		frame_buffer[1] = size + 6;
 		frame_buffer[2] = cmd;
