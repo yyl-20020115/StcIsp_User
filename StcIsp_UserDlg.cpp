@@ -143,7 +143,6 @@ static void GetSerialPorts(std::vector<DWORD_PTR>& ports, DWORD maxlen = 1ULL <<
 		}
 		delete[] szDevices;
 	}
-	std::sort(ports.begin(), ports.end());
 }
 
 UINT CStcIspUserDlg::DoUpload(LPVOID param) {
@@ -558,6 +557,8 @@ void CStcIspUserDlg::UpdateCommPortsList()
 		listed_ports.push_back(p);
 	}
 	std::sort(listed_ports.begin(), listed_ports.end());
+	std::sort(found_ports.begin(), found_ports.end());
+
 	bool eq = found_ports.size()>0 
 		&& listed_ports.size() 
 		== found_ports.size() 
@@ -568,6 +569,7 @@ void CStcIspUserDlg::UpdateCommPortsList()
 	if (!eq) {
 		this->ComboPorts.SetCurSel(-1);
 		this->ComboPorts.Clear();
+		this->ComboPorts.ResetContent();
 		for (size_t i = 0; i < found_ports.size(); i++) {
 			CString com_name;
 			DWORD_PTR com_number = found_ports[i];
