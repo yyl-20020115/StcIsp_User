@@ -944,7 +944,7 @@ BOOL CStcIspUserDlg::SendCommand(unsigned char cmd, unsigned int address, unsign
 	DWORD NumberOfBytesWritten = 0;
 	unsigned char* frame_buffer = new unsigned char[size + 10];
 	if (frame_buffer != nullptr) {
-		memset(frame_buffer, 0, size + 10);
+		memset(frame_buffer, 0, ((unsigned int)size) + 10);
 		frame_buffer[0] = CMD_HEAD_SIGN;
 		frame_buffer[1] = size + 6;
 		frame_buffer[2] = cmd;
